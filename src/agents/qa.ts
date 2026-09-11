@@ -224,21 +224,28 @@ export class QAAgent {
       severity: "warning"
     });
 
-    // 13. Visual Representative Frame Snapshots Inspection (0%, 25%, 50%, 75%, 98%)
+    // 13. Representative frame inspection.
+    // Long-form video is sampled at 0/10/25/50/75/90/98% so a failure confined to one
+    // act cannot hide between widely spaced samples (spec section 25).
     const snapshotsDir = join(outputDir, "qa/snapshots");
     mkdirSync(snapshotsDir, { recursive: true });
 
     const totalDuration = videoProbe.duration || audioDuration || 63;
-    const samplePoints = [
-      { name: "0%", time: 0.5 },
-      { name: "25%", time: Math.round(totalDuration * 0.25 * 10) / 10 },
-      { name: "50%", time: Math.round(totalDuration * 0.50 * 10) / 10 },
-      { name: "75%", time: Math.round(totalDuration * 0.75 * 10) / 10 },
-      { name: "98%", time: Math.max(1, Math.round((totalDuration - 1) * 10) / 10) }
-    ];
+    const fractions = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98];
+    const samplePoints = fractions.map((f) => ({
+      name: `${Math.round(f * 100)}%`,
+      time:
+        f === 0
+          ? 0.5
+          : Math.min(
+              Math.max(0.5, Math.round(totalDuration * f * 10) / 10),
+              Math.max(0.5, Math.round((totalDuration - 0.5) * 10) / 10)
+            )
+    }));
 
     let framesValid = true;
     const frameDetails: string[] = [];
+    const frameSizes: Array<{ name: string; size: number }> = [];
     if (videoExists) {
       for (const sp of samplePoints) {
         const frameName = `frame_${sp.name.replace("%", "pct")}.jpg`;
@@ -247,8 +254,9 @@ export class QAAgent {
           await FFmpegService.extractSnapshot(videoPath, sp.time, framePath);
           if (existsSync(framePath)) {
             const size = statSync(framePath).size;
+            frameSizes.push({ name: sp.name, size });
             frameDetails.push(`${sp.name} (${sp.time}s): ${(size / 1024).toFixed(1)} KB`);
-            // Healthy 1080p JPEG should be > 20 KB
+            // A blank or near-blank 1080p JPEG compresses far below this.
             if (size < 20000) {
               framesValid = false;
               warnings.push(`Frame snapshot at ${sp.name} is abnormally small (${size} bytes) - possible blank frame`);
@@ -267,14 +275,36 @@ export class QAAgent {
     }
 
     checks.push({
-      name: "Representative Frame Inspection (0%, 25%, 50%, 75%, 98%)",
+      name: `Representative Frame Inspection (${fractions.map((f) => `${Math.round(f * 100)}%`).join(", ")})`,
       category: "frame_inspection",
       passed: framesValid,
       actual: frameDetails.join("; "),
-      expected: "All 5 frames rendered and non-empty (>20KB each)",
+      expected: `All ${samplePoints.length} frames rendered and non-empty (>20KB each)`,
       severity: "critical"
     });
     if (!framesValid) errors.push("Frame inspection failed: one or more sample frames are missing or blank");
+
+    // 14. Frame-level structural distinctness across the runtime. This is a supplementary
+    // signal only; layout-signature analysis in the visual QA agent is the primary
+    // diversity metric (spec section 24 forbids relying on file size alone).
+    if (frameSizes.length >= 3) {
+      const distinctSizes = new Set(frameSizes.map((f) => Math.round(f.size / 2048))).size;
+      const framesDistinct = distinctSizes >= Math.max(3, Math.ceil(frameSizes.length * 0.6));
+      checks.push({
+        name: "Sampled Frame Structural Distinctness",
+        category: "frame_inspection",
+        passed: framesDistinct,
+        actual: `${distinctSizes} distinct frame profiles across ${frameSizes.length} samples`,
+        expected: `>= ${Math.max(3, Math.ceil(frameSizes.length * 0.6))} distinct profiles`,
+        severity: "warning"
+      });
+      if (!framesDistinct) {
+        warnings.push(
+          `Sampled frames are structurally similar (${distinctSizes}/${frameSizes.length} distinct); ` +
+            `the video may be visually repetitive across its runtime`
+        );
+      }
+    }
 
     // Compute Category Pass/Fail
     const getCategoryStatus = (cat: QACheckItem["category"]): "PASS" | "FAIL" => {

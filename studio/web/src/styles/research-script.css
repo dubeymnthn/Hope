@@ -1,0 +1,658 @@
+/* ============================================================================
+   DOCUMENTARY STUDIO — styles/research-script.css
+   ----------------------------------------------------------------------------
+   Page-specific styles for research.html and script.html. Everything here
+   builds on tokens.css + components.css — no hard-coded colors/sizes, and no
+   class from components.css is renamed or forked. New shared-shaped needs
+   (evidence confidence chip, editorial script layout, etc.) live here since
+   they don't exist yet in the shared component set.
+
+   SECTION INDEX
+     1. Research — three-column shell
+     2. Research — left column (categories)
+     3. Research — center column (claims + sources views)
+     4. Research — evidence confidence chip
+     5. Research — right column (evidence inspector)
+     6. Script — page layout + chapter/scene headers
+     7. Script — sentence rows + inline evidence chip
+     8. Script — evidence popover (slide-in panel)
+   ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   1. Research — three-column shell
+--------------------------------------------------------------------------- */
+.research-shell {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr) 360px;
+  height: calc(100vh - var(--topbar-h));
+}
+
+.research-col {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.research-col-categories {
+  border-right: 1px solid var(--border);
+  padding: var(--space-4) var(--space-3);
+}
+
+.research-col-center {
+  padding: var(--space-4) var(--space-5);
+}
+
+.research-col-inspector {
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  padding: var(--space-4);
+}
+
+.research-col-heading {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0 var(--space-2) var(--space-3);
+}
+
+/* ---------------------------------------------------------------------------
+   2. Research — left column (categories)
+--------------------------------------------------------------------------- */
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.category-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  font-family: var(--font-ui);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.category-row:hover {
+  background: var(--surface-2);
+}
+
+.category-row.active {
+  background: var(--surface-2);
+}
+
+.category-row.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.category-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.category-row-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.category-row-percent {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.category-row-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.category-row-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.category-row-meta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   3. Research — center column (claims + sources views)
+--------------------------------------------------------------------------- */
+.center-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.center-toolbar-title {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.center-toolbar-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.center-filter {
+  width: 100%;
+  max-width: 320px;
+}
+
+.claim-list,
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.claim-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.claim-row:hover {
+  background: var(--surface-2);
+}
+
+.claim-row.active {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.claim-row-text {
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.claim-row-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.claim-row-unverified {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+}
+
+.center-empty,
+.inspector-empty {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  padding: var(--space-5) var(--space-2);
+  text-align: center;
+}
+
+.center-section-label {
+  font-family: var(--font-ui);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.center-section-label:first-child {
+  margin-top: 0;
+}
+
+.source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.source-row:hover {
+  background: var(--surface-2);
+}
+
+.source-row.active {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+
+.source-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.source-row-name {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.source-row-meta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.source-row-count {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   4. Research — evidence confidence chip
+   Confidence is not pass/fail, so it is deliberately NOT mapped onto
+   --success/--warning/--danger. High confidence borrows the rare --info hue
+   (documented in tokens.css as "informational accents distinct from
+   --accent"); medium/low step down through neutral text tones instead of a
+   second semantic color.
+--------------------------------------------------------------------------- */
+.evidence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.evidence-chip:hover {
+  background: var(--surface-3);
+}
+
+.evidence-chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.evidence-chip[data-confidence='high'] {
+  color: var(--info);
+  border-color: rgba(108, 155, 255, 0.4);
+}
+
+.evidence-chip[data-confidence='medium'] {
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+}
+
+.evidence-chip[data-confidence='low'] {
+  color: var(--text-tertiary);
+  border-color: var(--border);
+  border-style: dashed;
+}
+
+/* Same subtle, non-semantic confidence scale as .evidence-chip above, but
+   built on the shared .badge shape for the two places confidence appears as
+   a labeled pill (Evidence Inspector row, script sentence popover). Kept
+   deliberately off .badge-success/-warning/-danger since confidence is not
+   a pass/fail signal. */
+.badge-confidence-high {
+  color: var(--info);
+  background: rgba(108, 155, 255, 0.12);
+  border-color: rgba(108, 155, 255, 0.35);
+}
+
+.badge-confidence-medium {
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.badge-confidence-low {
+  color: var(--text-tertiary);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+/* ---------------------------------------------------------------------------
+   5. Research — right column (evidence inspector)
+--------------------------------------------------------------------------- */
+.inspector-title {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 var(--space-3);
+}
+
+.inspector-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.inspector-row-value.is-excerpt {
+  display: block;
+  text-align: left;
+  font-weight: 400;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.inspector-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.inspector-usage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.usage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--accent);
+  background: var(--accent-muted);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px 9px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.usage-chip:hover {
+  text-decoration: underline;
+}
+
+.source-detail-block {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ---------------------------------------------------------------------------
+   6. Script — page layout + chapter/scene headers
+--------------------------------------------------------------------------- */
+.script-content {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-8);
+}
+
+.script-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--space-6);
+}
+
+.script-hero-title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.script-hero-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.script-chapter-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-8) 0 var(--space-4);
+}
+
+.script-chapter-divider:first-of-type {
+  margin-top: 0;
+}
+
+.script-chapter-label {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.script-chapter-rule {
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+
+.script-scene {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+.script-scene:last-child {
+  border-bottom: none;
+}
+
+.script-scene.is-highlighted {
+  background: var(--accent-muted);
+  border-radius: var(--radius-md);
+}
+
+.script-scene-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-2);
+}
+
+.script-scene-number {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.script-scene-title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.script-scene-body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------------------------------------------------------------------
+   7. Script — sentence rows + inline evidence chip
+--------------------------------------------------------------------------- */
+.script-sentence-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.script-sentence {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: 1.7;
+  color: var(--text);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.script-sentence:hover {
+  background: var(--surface-2);
+}
+
+.script-sentence.is-highlighted {
+  background: var(--accent-muted);
+}
+
+.script-sentence-evidence {
+  margin-top: var(--space-2);
+  flex-shrink: 0;
+}
+
+.script-sentence-evidence.kbd {
+  height: auto;
+  min-width: 32px;
+  padding: 2px 7px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.script-sentence-evidence.kbd:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------------------
+   8. Script — evidence popover (slide-in panel)
+--------------------------------------------------------------------------- */
+.evidence-popover {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: var(--surface-3);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  z-index: 250;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.evidence-popover.open {
+  transform: translateX(0);
+}
+
+.evidence-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.evidence-popover-body {
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.evidence-popover-body .inspector-row-value.is-excerpt {
+  margin-top: 2px;
+}
+
+.evidence-popover-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.evidence-popover-link:hover {
+  text-decoration: underline;
+}

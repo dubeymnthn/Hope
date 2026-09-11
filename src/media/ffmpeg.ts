@@ -78,7 +78,10 @@ export class FFmpegService {
     }
 
     try {
-      const args = ["-i", mediaPath, "-af", "volumedetect", "-f", "null", "/dev/null"];
+      // The null sink must be the platform's device: "/dev/null" is POSIX-only and on
+      // Windows only "works" by accident because ffmpeg errors and we read stderr anyway.
+      const nullDevice = process.platform === "win32" ? "NUL" : "/dev/null";
+      const args = ["-i", mediaPath, "-af", "volumedetect", "-f", "null", nullDevice];
       // ffmpeg writes filter output to stderr
       let outputText = "";
       try {

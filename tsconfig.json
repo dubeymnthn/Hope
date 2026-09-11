@@ -11,6 +11,6 @@
     "rootDir": ".",
     "declaration": true
   },
-  "include": ["src/**/*", "test/**/*"],
-  "exclude": ["node_modules", "dist", "videos"]
+  "include": ["src/**/*", "test/**/*", "studio/server/**/*"],
+  "exclude": ["node_modules", "dist", "videos", "studio/web"]
 }

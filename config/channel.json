@@ -11,7 +11,18 @@
     "maximumDurationMinutes": 13,
     "preferredChapters": 8,
     "allowDynamicChapterCount": true,
-    "wordsPerMinuteEstimate": 150
+    "wordsPerMinuteEstimate": 189,
+    "targetToleranceMinutes": 1,
+    "calibration": {
+      "ttsWordsPerMinute": 189,
+      "measuredAt": "2026-09-11T02:39:00Z",
+      "measuredFrom": "topics/why-modern-batteries-are-still-expensive (16 scenes, full pipeline run)",
+      "sampleWords": 1366,
+      "sampleSeconds": 433.2,
+      "device": "cpu",
+      "chatterboxVersion": "0.1.7",
+      "voice": "am_adam"
+    }
   },
   "editorial": {
     "requireThesis": true,
@@ -35,6 +46,6 @@
   "versions": {
     "scriptGenerator": "2.0.0",
     "storyboardGenerator": "2.0.0",
-    "visualGenerator": "2.0.4"
+    "visualGenerator": "3.2.1"
   }
 }

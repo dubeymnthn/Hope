@@ -25,8 +25,8 @@ export const ResearchFactSchema = z.object({
 export type ResearchFact = z.infer<typeof ResearchFactSchema>;
 
 export const StatisticItemSchema = z.object({
-  metric: z.string().describe("What is being measured (e.g., 'HBM3e spot price')"),
-  value: z.string().describe("The value or change (e.g., '+280%')"),
+  metric: z.string().describe("What is being measured (e.g., 'average pack price')"),
+  value: z.string().describe("The value or change (e.g., '+12%')"),
   context: z.string().describe("Context or timeframe (e.g., 'Q1 2024 to Q3 2026')"),
   source: SourceCitationSchema.optional()
 });

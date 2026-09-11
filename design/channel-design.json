@@ -1,75 +1,75 @@
 {
-  "version": "1.0.0",
-  "name": "Modern Tech Documentary",
+  "version": "3.0.0",
+  "name": "Editorial Documentary",
   "canvas": {
     "width": 1920,
     "height": 1080,
     "fps": 30,
     "safeZone": {
-      "top": 80,
-      "bottom": 120,
-      "left": 100,
-      "right": 100
+      "top": 96,
+      "bottom": 96,
+      "left": 128,
+      "right": 128
     }
   },
   "typography": {
     "fontFamilyDisplay": "'Inter', 'Segoe UI', system-ui, sans-serif",
     "fontFamilyBody": "'Inter', 'Segoe UI', system-ui, sans-serif",
-    "fontFamilyCode": "'JetBrains Mono', 'Fira Code', monospace",
+    "fontFamilyCode": "'JetBrains Mono', 'Consolas', monospace",
     "scale": {
-      "hero": "72px",
+      "hero": "76px",
       "h1": "54px",
-      "h2": "40px",
+      "h2": "44px",
       "h3": "28px",
-      "body": "22px",
-      "caption": "18px"
+      "body": "21px",
+      "caption": "16px"
     },
-    "lineHeight": 1.25,
+    "lineHeight": 1.45,
     "weights": {
-      "bold": 800,
+      "bold": 700,
       "semi": 600,
       "normal": 400
     }
   },
   "colors": {
-    "background": "#08090e",
-    "backgroundElevated": "#10121a",
-    "surface": "#161924",
-    "surfaceBorder": "rgba(255, 255, 255, 0.1)",
-    "primary": "#00f5ff",
-    "secondary": "#8a2be2",
-    "accent": "#ff007f",
-    "success": "#00ff88",
-    "warning": "#ffaa00",
-    "text": "#ffffff",
-    "textMuted": "#94a3b8",
-    "textFaint": "#64748b",
-    "gridLine": "rgba(255, 255, 255, 0.04)"
+    "background": "#12100e",
+    "backgroundElevated": "#1a1815",
+    "surface": "#201d1a",
+    "surfaceBorder": "rgba(240, 235, 226, 0.14)",
+    "primary": "#d98b33",
+    "secondary": "#6f7d8c",
+    "accent": "#b5452f",
+    "success": "#5f8a5f",
+    "warning": "#c98a2b",
+    "text": "#f4efe7",
+    "textMuted": "#a49c90",
+    "textFaint": "#776e63",
+    "gridLine": "rgba(240, 235, 226, 0.05)"
   },
   "motion": {
-    "easeDefault": "power3.out",
-    "easeEmphasis": "elastic.out(1, 0.75)",
+    "easeDefault": "power2.out",
+    "easeEmphasis": "power3.inOut",
     "durationFast": 0.4,
-    "durationMedium": 0.8,
-    "durationSlow": 1.4,
-    "staggerDefault": 0.08
+    "durationMedium": 0.7,
+    "durationSlow": 1.1,
+    "staggerDefault": 0.12
   },
   "visualStyles": {
-    "density": "high",
-    "cardBorderRadius": "16px",
-    "cardGlow": "0 8px 32px rgba(0, 245, 255, 0.12)",
+    "density": "medium",
+    "cardBorderRadius": "2px",
+    "cardGlow": "none",
     "chartTheme": {
-      "gridColor": "rgba(255, 255, 255, 0.06)",
-      "lineColor": "#00f5ff",
-      "fillColor": "rgba(0, 245, 255, 0.1)",
-      "barColor": "#8a2be2",
-      "accentColor": "#ff007f"
+      "gridColor": "rgba(240, 235, 226, 0.08)",
+      "lineColor": "#d98b33",
+      "fillColor": "rgba(217, 139, 51, 0.12)",
+      "barColor": "#d98b33",
+      "accentColor": "#b5452f"
     },
     "diagramTheme": {
-      "nodeBackground": "#161924",
-      "nodeBorder": "#00f5ff",
-      "edgeColor": "#64748b",
-      "edgeActive": "#00f5ff"
+      "nodeBackground": "#201d1a",
+      "nodeBorder": "rgba(240, 235, 226, 0.14)",
+      "edgeColor": "#776e63",
+      "edgeActive": "#d98b33"
     }
   }
 }

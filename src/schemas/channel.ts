@@ -1,14 +1,52 @@
 import { z } from "zod";
 
+/**
+ * Measured narration-rate calibration (spec V2.2 §3).
+ *
+ * The planning rate is derived from real synthesis runs, never assumed. Every field
+ * records where the number came from so it can be audited and recalibrated. A missing
+ * block means "uncalibrated": the planner falls back to the legacy estimate and says so.
+ */
+export const TtsCalibrationSchema = z.object({
+  ttsWordsPerMinute: z.number().positive().describe("Measured spoken words per minute from real synthesis"),
+  measuredAt: z.string().describe("ISO timestamp of the benchmark run that produced this rate"),
+  measuredFrom: z.string().describe("Workspace or run identifier the measurement came from"),
+  sampleWords: z.number().int().positive().describe("Words in the measured narration"),
+  sampleSeconds: z.number().positive().describe("Measured narration duration in seconds"),
+  device: z.string().describe("TTS device the sample was synthesised on"),
+  chatterboxVersion: z.string().optional().describe("chatterbox-tts version at measurement time"),
+  voice: z.string().optional().describe("Voice identifier used for the sample")
+});
+export type TtsCalibration = z.infer<typeof TtsCalibrationSchema>;
+
 export const VideoConfigSchema = z.object({
   targetDurationMinutes: z.number().default(10),
   minimumDurationMinutes: z.number().default(7),
   maximumDurationMinutes: z.number().default(13),
+  /** Narrower band the planner aims for around the target (spec V2.2 §3: 9-11 for a 10 min target). */
+  targetToleranceMinutes: z.number().default(1),
   preferredChapters: z.number().default(8),
   allowDynamicChapterCount: z.boolean().default(true),
-  wordsPerMinuteEstimate: z.number().default(150)
+  /**
+   * Legacy planning estimate, used only when no calibration block exists. Kept for
+   * backward compatibility; production planning reads `calibration.ttsWordsPerMinute`.
+   */
+  wordsPerMinuteEstimate: z.number().default(150),
+  calibration: TtsCalibrationSchema.optional()
 });
 export type VideoConfig = z.infer<typeof VideoConfigSchema>;
+
+/** The narration rate the planner should use, and where it came from. */
+export function resolvePlanningRate(video?: VideoConfig): {
+  wordsPerMinute: number;
+  source: "calibration" | "legacy-estimate";
+  calibration?: TtsCalibration;
+} {
+  if (video?.calibration) {
+    return { wordsPerMinute: video.calibration.ttsWordsPerMinute, source: "calibration", calibration: video.calibration };
+  }
+  return { wordsPerMinute: video?.wordsPerMinuteEstimate ?? 150, source: "legacy-estimate" };
+}
 
 export const EditorialConfigSchema = z.object({
   requireThesis: z.boolean().default(true),

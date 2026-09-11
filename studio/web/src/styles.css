@@ -1,0 +1,284 @@
+/* ============================================================================
+   DOCUMENTARY STUDIO — MAIN STYLESHEET
+   ----------------------------------------------------------------------------
+   Imports all modular stylesheets from the reference design system, followed by
+   application-specific integration rules.
+   ============================================================================ */
+
+@import "./styles/tokens.css";
+@import "./styles/components.css";
+@import "./styles/editor.css";
+@import "./styles/research-script.css";
+@import "./styles/audio-qa-export.css";
+
+/* App-level layout overrides & reset */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* React App Shell integration */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background: var(--bg);
+  position: relative;
+}
+
+/* Left Nav Sidebar when integrated in App.tsx */
+.app-nav {
+  position: fixed;
+  top: var(--topbar-h);
+  bottom: 0;
+  left: 0;
+  width: var(--nav-w);
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 90;
+  transition: width var(--dur-base) var(--ease-out);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+body[data-nav-collapsed='true'] .app-nav {
+  width: var(--nav-w-collapsed);
+}
+
+.app-nav-brand {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-nav-brand .brand-title {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-nav-brand .brand-subtitle {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.app-nav-list {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) 0;
+  flex: 1;
+}
+
+.app-nav-footer {
+  padding: var(--space-2);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Main Area */
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding-top: var(--topbar-h);
+  padding-left: var(--nav-w);
+  transition: padding-left var(--dur-base) var(--ease-out);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+body[data-nav-collapsed='true'] .app-main {
+  padding-left: var(--nav-w-collapsed);
+}
+
+.app-content {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Topbar custom breadcrumbs and actions */
+.topbar-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.topbar-project-title {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.topbar-sep {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.topbar-page-title {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.search-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--dur-fast), color var(--dur-fast);
+}
+
+.search-pill-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+/* Status Badges */
+.badge.state-HEALTHY,
+.badge.qa-PASS,
+.badge.stage-complete {
+  background: rgba(95, 174, 122, 0.15);
+  color: var(--success);
+}
+
+.badge.state-NEEDS_REVIEW,
+.badge.qa-WARN,
+.badge.stage-pending {
+  background: rgba(217, 182, 91, 0.15);
+  color: var(--warning);
+}
+
+.badge.state-BLOCKED,
+.badge.state-FAILED,
+.badge.qa-FAIL,
+.badge.stage-failed {
+  background: rgba(217, 104, 95, 0.15);
+  color: var(--danger);
+}
+
+.badge.state-RUNNING {
+  background: rgba(108, 155, 255, 0.15);
+  color: var(--info);
+}
+
+/* Claim Badges */
+.claim-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.claim-badge.SUPPORTED {
+  background: rgba(95, 174, 122, 0.15);
+  color: var(--success);
+}
+.claim-badge.PLAUSIBLE {
+  background: rgba(108, 155, 255, 0.15);
+  color: var(--info);
+}
+.claim-badge.UNCERTAIN,
+.claim-badge.DISPUTED {
+  background: rgba(217, 182, 91, 0.15);
+  color: var(--warning);
+}
+.claim-badge.UNSUPPORTED {
+  background: rgba(217, 104, 95, 0.15);
+  color: var(--danger);
+}
+
+/* Generic Utilities */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.data-table th {
+  text-align: left;
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.data-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.data-table tr:hover td {
+  background: var(--surface-2);
+}
+
+.error-banner {
+  background: rgba(217, 104, 95, 0.12);
+  border: 1px solid var(--danger);
+  color: #ffb4ae;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-3);
+}
+
+.empty-state {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.loading {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  padding: var(--space-6);
+  text-align: center;
+}

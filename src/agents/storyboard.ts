@@ -12,18 +12,118 @@ import {
   DataPoint
 } from "../schemas/storyboard.js";
 import { ResearchResult } from "../schemas/research.js";
+import { VisualPlan, VisualPlanScene } from "../schemas/visual-plan.js";
 
 const CAMERA_MOTIONS = [
+  "static",
   "slow push-in",
   "subtle pan right",
-  "slow zoom-in",
   "slow drift down",
-  "static",
   "slow pull-out",
   "subtle pan left"
 ];
 
+/**
+ * Storyboard assembly.
+ *
+ * In the V2 production path this class performs NO creative reasoning. The Antigravity
+ * Visual Director decides what every scene shows (storyboard/visual-plan.json); this
+ * class deterministically merges that plan with the authoritative audio alignment to
+ * produce storyboard/storyboard.json.
+ *
+ * Timing authority always belongs to the real audio, never to the plan.
+ */
 export class StoryboardAgent {
+  /**
+   * V2 production path: merge the Visual Director's plan with real audio timings.
+   */
+  assemble(params: {
+    script: ScriptResult;
+    audio: AudioTimestamps;
+    plan: VisualPlan;
+    outputDir: string;
+    design: ChannelDesign;
+    research?: ResearchResult;
+  }): StoryboardResult {
+    const { script, audio, plan, outputDir, design, research } = params;
+    console.log(
+      `[STORYBOARD] Assembling storyboard from Visual Director plan (${plan.scenes.length} scenes) ` +
+        `against authoritative audio alignment...`
+    );
+
+    const timing = this.buildTimingMap(audio);
+    const planByScene = new Map<string, VisualPlanScene>();
+    for (const s of plan.scenes) planByScene.set(s.sceneId, s);
+
+    const scenes: StoryboardScene[] = script.scenes.map((scriptScene) => {
+      const planned = planByScene.get(scriptScene.id);
+      if (!planned) {
+        throw new Error(
+          `[STORYBOARD] Visual plan is missing scene "${scriptScene.id}". ` +
+            `The Visual Director must cover every script scene.`
+        );
+      }
+
+      const t = timing.get(scriptScene.id);
+      if (!t) {
+        throw new Error(
+          `[STORYBOARD] No audio alignment for scene "${scriptScene.id}". ` +
+            `Scene timing must come from generated narration.`
+        );
+      }
+
+      return {
+        id: scriptScene.id,
+        start: t.start,
+        duration: t.duration,
+        narration: scriptScene.narration,
+        visual_type: planned.visualMode as VisualType,
+        visual_mode: planned.visualMode,
+        visual_description: planned.visualDescription,
+        on_screen_text: planned.onScreenText,
+        animation: planned.animationIntent,
+        camera: planned.camera,
+        chapter: scriptScene.chapter,
+        narrative_purpose: planned.narrativePurpose,
+        beats: this.reconcileBeats(planned, t.duration),
+        claims_shown: planned.claimsShown ?? [],
+        source_references: planned.sourceReferences ?? [],
+        data_points: this.toDataPoints(planned),
+        assets_required: [],
+        renderer: "hyperframes",
+        // Mode-specific payloads the renderer consumes; carried through verbatim.
+        diagram_nodes: planned.diagramNodes ?? [],
+        diagram_edges: planned.diagramEdges ?? [],
+        timeline_events: planned.timelineEvents ?? [],
+        comparison_sides: planned.comparisonSides ?? [],
+        transition_in: planned.transitionIn
+      };
+    });
+
+    const result: StoryboardResult = {
+      video_title: plan.videoTitle || script.title,
+      total_duration: audio.totalDuration,
+      target_resolution: `${design.canvas.width}x${design.canvas.height}`,
+      target_fps: design.canvas.fps,
+      version: "2.0.0",
+      scenes
+    };
+
+    this.persist(result, outputDir);
+    console.log(
+      `[STORYBOARD] Assembled ${scenes.length} scenes, ${result.total_duration}s total, ` +
+        `${new Set(scenes.map((s) => s.visual_mode)).size} distinct visual modes.`
+    );
+    return result;
+  }
+
+  /**
+   * V1 compatibility path.
+   *
+   * Used by the milestone tests, which predate the Visual Director. It derives scene
+   * visuals from the script's own declared hints rather than from any scene-id lookup:
+   * there is deliberately no per-scene hardcoding here.
+   */
   generate(
     script: ScriptResult,
     audio: AudioTimestamps,
@@ -31,250 +131,212 @@ export class StoryboardAgent {
     outputDir: string,
     research?: ResearchResult
   ): StoryboardResult {
-    console.log(`[STORYBOARD] Dynamically authoring visual storyboard for ${script.scenes.length} scenes aligned to audio...`);
+    console.log(
+      `[STORYBOARD] (compat path) Deriving storyboard for ${script.scenes.length} scenes from ` +
+        `script-declared visual hints aligned to audio...`
+    );
 
-    const timestampMap = new Map<string, { start: number; end: number; duration: number }>();
-    for (const sent of audio.sentences) {
-      timestampMap.set(sent.sceneId, {
-        start: sent.start,
-        end: sent.end,
-        duration: sent.duration
-      });
-    }
-
-    // Historical presets for V1 memory topic compatibility
-    const legacyPresets: Record<string, {
-      type: VisualType;
-      mode: VisualMode;
-      onScreenText: string;
-      description: string;
-      animation: string;
-      camera: string;
-    }> = {
-      "scene-001": {
-        type: "statistic",
-        mode: "data_visualization",
-        onScreenText: "+200% TO +500% MEMORY SURGE",
-        description: "Massive glowing statistic showing the enterprise DRAM and spot market price explosion across 2024 to 2026.",
-        animation: "Count up from +0% to +500% over 1.2s with neon cyan glow and pulsing backdrop.",
-        camera: "slow push-in"
-      },
-      "scene-002": {
-        type: "comparison",
-        mode: "comparison",
-        onScreenText: "THE 3X SILICON PENALTY",
-        description: "Split architectural comparison contrasting conventional DDR5 wafer usage with 3D Through-Silicon Via (TSV) HBM stacks.",
-        animation: "Wafers slide into view with dimension callouts highlighting the 300% surface area deficit.",
-        camera: "subtle pan right"
-      },
-      "scene-003": {
-        type: "timeline",
-        mode: "timeline",
-        onScreenText: "100% PRODUCTION SOLD OUT",
-        description: "Milestone timeline tracking SK Hynix and Micron announcements locking out spot customers through 2026.",
-        animation: "Chronological nodes ignite in sequence with critical sell-out milestone badges.",
-        camera: "static"
-      },
-      "scene-004": {
-        type: "diagram",
-        mode: "technical_diagram",
-        onScreenText: "TSMC CoWoS CHOKE POINT",
-        description: "Technical cross-section diagram of TSMC CoWoS advanced packaging interposer bonding GPU logic and HBM3e stacks.",
-        animation: "Data streams pulse between silicon dies through the interposer with lead time warnings.",
-        camera: "slow zoom-in"
-      },
-      "scene-005": {
-        type: "chart",
-        mode: "data_visualization",
-        onScreenText: "CONSUMER BUFFER COLLAPSE",
-        description: "Plunging inventory curve tracking global channel buffers dropping from 16 weeks down to critical 3 weeks.",
-        animation: "Dynamic line graph plunges downwards with red warning accenting the supply deficit.",
-        camera: "slow drift down"
-      },
-      "scene-006": {
-        type: "text",
-        mode: "large_typography",
-        onScreenText: "THE AI ECONOMIC TOLLBOOTH",
-        description: "Kinetic typography framing HBM as the defining economic choke point of the entire generative AI era.",
-        animation: "Words snap into place with camera drift and high-contrast glowing accents.",
-        camera: "slow pull-out"
-      }
-    };
+    const timing = this.buildTimingMap(audio);
 
     const scenes: StoryboardScene[] = script.scenes.map((s, index) => {
-      const timing = timestampMap.get(s.id) || { start: 0, end: 5, duration: 5 };
-      const dur = timing.duration;
-
-      let visualType: VisualType = "data_visualization";
-      let visualMode: VisualMode = "data_visualization";
-      let onScreenText = s.purpose.toUpperCase();
-      let description = s.visual_hint || s.purpose;
-      let animation = "Fade in with subtle camera drift";
-      let camera = CAMERA_MOTIONS[index % CAMERA_MOTIONS.length];
-
-      // Check legacy preset first if applicable
-      if (legacyPresets[s.id] && !s.visualMode) {
-        const preset = legacyPresets[s.id];
-        visualType = preset.type;
-        visualMode = preset.mode;
-        onScreenText = preset.onScreenText;
-        description = preset.description;
-        animation = preset.animation;
-        camera = preset.camera;
-      } else {
-        // Dynamic visual mode inference
-        visualMode = this.inferVisualMode(s.visualMode, s.visual_hint, s.narration);
-        visualType = visualMode as VisualType;
-        onScreenText = this.deriveOnScreenText(s.purpose, s.narration);
-        description = s.visual_hint ? `${s.purpose}. ${s.visual_hint}` : s.purpose;
-        animation = `Dynamic ${visualMode} animation tailored to spoken narrative`;
-      }
-
-      // Generate internal visual beats across the scene duration
-      const beats: VisualBeat[] = this.generateVisualBeats(dur, s.purpose, visualMode);
-
-      // Extract relevant data points from research
-      const dataPoints: DataPoint[] = this.extractDataPoints(s.narration, research);
-
-      // Extract relevant source citations
-      const sources: string[] = research
-        ? research.sources.filter((src) => s.narration.toLowerCase().includes(src.title.toLowerCase().slice(0, 10))).map((src) => src.title)
-        : [];
+      const t = timing.get(s.id) ?? { start: 0, duration: 5 };
+      const visualMode = this.inferVisualMode(s.visualMode, s.visual_hint, s.narration);
 
       return {
         id: s.id,
-        start: timing.start,
-        duration: timing.duration,
+        start: t.start,
+        duration: t.duration,
         narration: s.narration,
-        visual_type: visualType,
+        visual_type: visualMode as VisualType,
         visual_mode: visualMode,
-        visual_description: description,
-        on_screen_text: onScreenText,
-        animation,
-        camera,
+        visual_description: s.visual_hint ? `${s.purpose}. ${s.visual_hint}` : s.purpose,
+        on_screen_text: this.deriveOnScreenText(s.purpose),
+        animation: `Motion appropriate to ${visualMode.replace(/_/g, " ")}, driven by the narration`,
+        camera: CAMERA_MOTIONS[index % CAMERA_MOTIONS.length],
         chapter: s.chapter,
         narrative_purpose: s.purpose,
-        beats,
-        claims_shown: s.claims || [],
-        source_references: sources,
-        data_points: dataPoints,
+        beats: this.deriveBeats(t.duration, visualMode),
+        claims_shown: s.claims ?? [],
+        source_references: [],
+        data_points: this.extractDataPoints(s.narration, research),
         assets_required: [],
-        renderer: "hyperframes"
+        renderer: "hyperframes",
+        diagram_nodes: [],
+        diagram_edges: [],
+        timeline_events: [],
+        comparison_sides: []
       };
     });
 
-    const storyboardResult: StoryboardResult = {
+    const result: StoryboardResult = {
       video_title: script.title,
       total_duration: audio.totalDuration,
-      target_resolution: "1920x1080",
-      target_fps: 30,
+      target_resolution: `${design.canvas.width}x${design.canvas.height}`,
+      target_fps: design.canvas.fps,
       version: "2.0.0",
       scenes
     };
 
-    const storyboardDir = join(outputDir, "storyboard");
-    mkdirSync(storyboardDir, { recursive: true });
+    this.persist(result, outputDir);
+    console.log(
+      `[STORYBOARD] Storyboard generated with ${scenes.length} audio-synchronized scenes ` +
+        `(${result.total_duration}s total).`
+    );
+    return result;
+  }
 
-    const jsonPath = join(storyboardDir, "storyboard.json");
-    writeFileSync(jsonPath, JSON.stringify(storyboardResult, null, 2), "utf-8");
+  private persist(result: StoryboardResult, outputDir: string): void {
+    const dir = join(outputDir, "storyboard");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "storyboard.json"), JSON.stringify(result, null, 2), "utf-8");
+  }
 
-    console.log(`[STORYBOARD] Storyboard generated with ${scenes.length} audio-synchronized scenes (${storyboardResult.total_duration}s total).`);
-    return storyboardResult;
+  private buildTimingMap(audio: AudioTimestamps): Map<string, { start: number; duration: number }> {
+    const map = new Map<string, { start: number; duration: number }>();
+    for (const sent of audio.sentences) {
+      map.set(sent.sceneId, { start: sent.start, duration: sent.duration });
+    }
+    return map;
+  }
+
+  /**
+   * Beats come from the Visual Director, but the real audio duration is authoritative.
+   * Offsets are clamped into the scene, and the final beat is extended to the scene end so
+   * the composition never runs dry before the narration finishes.
+   */
+  private reconcileBeats(planned: VisualPlanScene, duration: number): VisualBeat[] {
+    const sorted = [...planned.beats].sort((a, b) => a.startOffset - b.startOffset);
+    const beats: VisualBeat[] = [];
+
+    for (const b of sorted) {
+      const start = Math.max(0, Math.min(b.startOffset, duration));
+      const end = Math.max(start + 0.1, Math.min(b.endOffset, duration));
+      if (start >= duration) continue;
+      beats.push({
+        beatId: b.beatId,
+        startOffset: Math.round(start * 100) / 100,
+        endOffset: Math.round(end * 100) / 100,
+        purpose: b.purpose,
+        visualChange: b.visualChange,
+        animationDirective: b.animationDirective
+      });
+    }
+
+    if (beats.length === 0) {
+      return [
+        {
+          beatId: "beat-1",
+          startOffset: 0,
+          endOffset: Math.round(duration * 100) / 100,
+          purpose: planned.narrativePurpose,
+          visualChange: planned.visualDescription,
+          animationDirective: planned.animationIntent
+        }
+      ];
+    }
+
+    beats[beats.length - 1].endOffset = Math.round(duration * 100) / 100;
+    return beats;
+  }
+
+  private toDataPoints(planned: VisualPlanScene): DataPoint[] {
+    return (planned.dataPoints ?? []).map((dp) => ({
+      metric: dp.metric,
+      value: dp.value,
+      unit: dp.unit,
+      period: dp.period,
+      source: dp.sourceId
+    }));
   }
 
   private inferVisualMode(explicitMode?: string, hint?: string, narration?: string): VisualMode {
+    const validModes: VisualMode[] = [
+      "data_visualization", "technical_diagram", "timeline",
+      "supply_chain_flow", "comparison", "process_animation",
+      "historical_sequence", "large_typography", "kinetic_emphasis",
+      "abstract_metaphor", "chart", "architecture_diagram",
+      "ambient_establishing", "evidence_document", "map"
+    ];
+
     if (explicitMode) {
-      const modeCandidate = explicitMode.toLowerCase().replace(/[-\s]/g, "_");
-      const validModes: VisualMode[] = [
-        "data_visualization", "technical_diagram", "timeline",
-        "supply_chain_flow", "comparison", "process_animation",
-        "historical_sequence", "large_typography", "kinetic_emphasis",
-        "abstract_metaphor", "chart", "architecture_diagram",
-        "ambient_establishing", "evidence_document", "map"
-      ];
-      if (validModes.includes(modeCandidate as VisualMode)) {
-        return modeCandidate as VisualMode;
-      }
+      const candidate = explicitMode.toLowerCase().replace(/[-\s]/g, "_");
+      if (validModes.includes(candidate as VisualMode)) return candidate as VisualMode;
     }
 
     const combined = `${hint || ""} ${narration || ""}`.toLowerCase();
-    if (combined.includes("percent") || combined.includes("%") || combined.includes("surge") || combined.includes("metric") || combined.includes("price")) {
-      return "data_visualization";
-    }
-    if (combined.includes("versus") || combined.includes("compare") || combined.includes("penalty") || combined.includes("split")) {
-      return "comparison";
-    }
-    if (combined.includes("timeline") || combined.includes("chronology") || combined.includes("history") || combined.includes("sold out")) {
-      return "timeline";
-    }
-    if (combined.includes("diagram") || combined.includes("cross-section") || combined.includes("choke") || combined.includes("packaging")) {
-      return "technical_diagram";
-    }
-    if (combined.includes("inventory") || combined.includes("collapse") || combined.includes("plunge") || combined.includes("chart")) {
-      return "chart";
-    }
-    if (combined.includes("revolution") || combined.includes("future") || combined.includes("tollbooth") || combined.includes("defining")) {
-      return "large_typography";
-    }
+    const signals: Array<[VisualMode, RegExp]> = [
+      ["timeline", /\btimeline|chronolog|year by year|sequence of events\b/],
+      ["comparison", /\bversus\b|\bvs\b|compare|contrast|side by side|penalty\b/],
+      ["technical_diagram", /diagram|cross-?section|architecture|packaging|schematic|how it works\b/],
+      ["supply_chain_flow", /supply chain|upstream|downstream|flow|pipeline|logistics\b/],
+      ["evidence_document", /filing|report|document|memo|transcript|statement\b/],
+      ["map", /\bmap\b|geograph|region|country|continent\b/],
+      ["process_animation", /process|step by step|stages|workflow\b/],
+      ["data_visualization", /percent|%|surge|price|metric|growth|decline|chart|graph\b/],
+      ["large_typography", /defining|fundamental|the real question|bottom line\b/]
+    ];
 
-    return "data_visualization";
+    for (const [mode, pattern] of signals) {
+      if (pattern.test(combined)) return mode;
+    }
+    return "ambient_establishing";
   }
 
-  private deriveOnScreenText(purpose: string, narration: string): string {
-    const words = purpose.replace(/^(Hook viewer with|Explain the|Demonstrate the|Highlight the|Conclude with)/i, "").trim();
-    const tokens = words.split(/\s+/).slice(0, 6);
-    return tokens.join(" ").toUpperCase();
+  private deriveOnScreenText(purpose: string): string {
+    const cleaned = purpose
+      .replace(/^(Hook viewer with|Explain the|Demonstrate the|Highlight the|Conclude with|Introduce the)\s*/i, "")
+      .trim();
+    return cleaned.split(/\s+/).slice(0, 6).join(" ").toUpperCase();
   }
 
-  private generateVisualBeats(duration: number, purpose: string, visualMode: VisualMode): VisualBeat[] {
+  private deriveBeats(duration: number, visualMode: VisualMode): VisualBeat[] {
+    const label = visualMode.replace(/_/g, " ");
     if (duration <= 8) {
       return [
         {
           beatId: "beat-1",
           startOffset: 0,
-          endOffset: duration,
-          purpose: `Establish ${visualMode}`,
-          visualChange: "Initial reveal and key typography hit",
-          animationDirective: "Fade and slide into frame"
+          endOffset: Math.round(duration * 100) / 100,
+          purpose: `Establish ${label}`,
+          visualChange: "Primary structure and typographic hit resolve",
+          animationDirective: "Enter and settle"
         }
       ];
     }
 
-    const b1End = Math.round((duration * 0.35) * 10) / 10;
-    const b2End = Math.round((duration * 0.75) * 10) / 10;
-
+    const b1 = Math.round(duration * 0.35 * 10) / 10;
+    const b2 = Math.round(duration * 0.75 * 10) / 10;
     return [
       {
         beatId: "beat-1",
         startOffset: 0,
-        endOffset: b1End,
-        purpose: "Introduce core premise and establish context",
-        visualChange: "Display headline callout and primary structure",
-        animationDirective: "Hero title entrance with ambient illumination"
+        endOffset: b1,
+        purpose: "Establish context",
+        visualChange: `Introduce the ${label} and its framing`,
+        animationDirective: "Structure resolves into place"
       },
       {
         beatId: "beat-2",
-        startOffset: b1End,
-        endOffset: b2End,
-        purpose: "Reveal analytical mechanism or empirical evidence",
-        visualChange: "Data curve animation or component cross-section highlighting",
-        animationDirective: "Active element draw-in with warning/accent illumination"
+        startOffset: b1,
+        endOffset: b2,
+        purpose: "Reveal the mechanism or evidence",
+        visualChange: "Active elements and supporting values resolve",
+        animationDirective: "Progressive reveal of the substantive layer"
       },
       {
         beatId: "beat-3",
-        startOffset: b2End,
-        endOffset: duration,
-        purpose: "Synthesize consequence and transition forward",
-        visualChange: "Impact takeaway badge highlights and camera push concludes",
-        animationDirective: "Subtle pulse emphasis and prep for scene transition"
+        startOffset: b2,
+        endOffset: Math.round(duration * 100) / 100,
+        purpose: "Land the consequence and hand off",
+        visualChange: "Emphasis settles on the takeaway",
+        animationDirective: "Hold, then prepare the transition"
       }
     ];
   }
 
   private extractDataPoints(narration: string, research?: ResearchResult): DataPoint[] {
+    if (!research) return [];
     const points: DataPoint[] = [];
-    if (!research) return points;
-
     for (const stat of research.statistics) {
       const valClean = stat.value.replace(/[^a-zA-Z0-9%]/g, "").toLowerCase();
       if (valClean && narration.toLowerCase().includes(valClean)) {

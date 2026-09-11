@@ -1,8 +1,15 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { StoryboardScene, VisualMode } from "../schemas/storyboard.js";
+import { StoryboardScene, VisualMode, VisualBeat } from "../schemas/storyboard.js";
 import { ChannelDesign } from "../schemas/design.js";
 import { computeSceneFingerprint } from "./scene-hash.js";
+import {
+  PRIMITIVE_REGISTRY,
+  FALLBACK_CHAIN,
+  PrimitiveOutput,
+  esc,
+  hashInt
+} from "./primitives.js";
 
 export interface GenerationResult {
   sceneId: string;
@@ -10,8 +17,53 @@ export interface GenerationResult {
   metaPath: string;
   fingerprint: string;
   reused: boolean;
+  /** Mode actually rendered, which may differ from the requested mode after degradation. */
+  renderedMode?: VisualMode;
+  /** Structural signature of the composition, consumed by anti-repetition QA. */
+  layoutSignature?: string;
+  degraded?: string;
+  /** Beat-driven visual state metrics, consumed by visual QA (spec V2.2 §14). */
+  rhythm?: SceneRhythmMetrics;
 }
 
+/**
+ * What the composition actually does over time, measured from the beats it was built
+ * from rather than asserted. Visual QA reads this from each scene's meta file.
+ */
+export interface SceneRhythmMetrics {
+  beatCount: number;
+  /** Beats whose changeType is not `hold` (or that lack a type but carry a visualChange). */
+  visualStateChangeCount: number;
+  /** Distinct named visual states across the scene's beats. */
+  uniqueVisualStates: number;
+  /** Longest run, in seconds, where the composition's state does not change. */
+  longestNoChangeInterval: number;
+  /** Beats over the ~15s guideline that carry an explicit justification. */
+  justifiedLongBeats: number;
+  /** Beats over the ~15s guideline with no justification: diagnostics, not failures. */
+  unjustifiedLongBeats: number;
+  /** Beats where `focus.primary` differs from the previous beat. */
+  focusChanges: number;
+  changeTypes: string[];
+  /** Element groups the primitive exposed for beat-sequenced reveal. */
+  beatSequencedGroups: number;
+}
+
+/** Beats past this length must say why the viewer needs the time (spec V2.2 §10). */
+export const LONG_BEAT_GUIDELINE_SECONDS = 15;
+
+/**
+ * Scene composition generator.
+ *
+ * Renders a StoryboardScene into a self-contained HyperFrames composition. All creative
+ * decisions arrive in the scene data from the Antigravity Visual Director; this class only
+ * decides HOW to draw the requested mode (spec sections 12, 15, 27).
+ *
+ * V2.2: beats are no longer metadata. Each beat schedules a visual state change on the
+ * GSAP timeline — element groups tagged `data-beat-seq` reveal on their beat, `highlight`
+ * beats shift emphasis, `zoom`/`pan` beats move the camera for that beat only — so the
+ * frame evolves with the narration instead of animating once and holding (spec §9-§12).
+ */
 export class SceneCompositionGenerator {
   async generateScene(
     scene: StoryboardScene,
@@ -20,85 +72,233 @@ export class SceneCompositionGenerator {
       designVersion: string;
       outputDir: string;
       videoId?: string;
+      /** Where node_modules lives, when outputDir is a per-topic directory. */
+      repoRoot?: string;
     }
   ): Promise<GenerationResult> {
     const { design, designVersion, outputDir, videoId = "video-factory" } = options;
+    const repoRoot = options.repoRoot ? resolve(options.repoRoot) : process.cwd();
+
     const compositionsDir = join(outputDir, "compositions");
     const scenesMetaDir = join(outputDir, "scenes");
     mkdirSync(compositionsDir, { recursive: true });
     mkdirSync(scenesMetaDir, { recursive: true });
 
-    // Copy GSAP bundle if not present in assets
-    const assetsDir = join(outputDir, "assets");
-    mkdirSync(assetsDir, { recursive: true });
-    const localGsap = join(assetsDir, "gsap.min.js");
-    if (!existsSync(localGsap)) {
-      const nodeGsap = resolve(outputDir, "node_modules/gsap/dist/gsap.min.js");
-      if (existsSync(nodeGsap)) {
-        copyFileSync(nodeGsap, localGsap);
-      }
-    }
+    this.ensureGsap(outputDir, repoRoot);
 
-    const fingerprint = computeSceneFingerprint({
-      videoId,
-      scene,
-      designVersion
-    });
-
+    const fingerprint = computeSceneFingerprint({ videoId, scene, designVersion });
     const htmlPath = join(compositionsDir, `${scene.id}.html`);
     const metaPath = join(scenesMetaDir, `${scene.id}.meta.json`);
 
-    // Idempotency check: Reuse existing scene if fingerprint matches exactly
+    // Idempotency: reuse an existing composition when the fingerprint matches exactly.
     if (existsSync(htmlPath) && existsSync(metaPath)) {
       try {
         const existingMeta = JSON.parse(readFileSync(metaPath, "utf-8"));
         if (existingMeta.fingerprint === fingerprint) {
+          console.log(`[SCENE-GEN] Scene ${scene.id} unchanged (${fingerprint.slice(0, 12)}). Reusing.`);
           return {
             sceneId: scene.id,
             htmlPath,
             metaPath,
             fingerprint,
-            reused: true
+            reused: true,
+            renderedMode: existingMeta.renderedMode,
+            layoutSignature: existingMeta.layoutSignature,
+            degraded: existingMeta.degraded,
+            rhythm: existingMeta.rhythm
           };
         }
       } catch {
-        // regenerate on meta error
+        // Unreadable metadata: fall through and regenerate.
       }
     }
 
-    console.log(`[SCENE-GEN] Authoring bespoke composition for ${scene.id} [${scene.visual_mode || scene.visual_type}]...`);
+    const requestedMode = (scene.visual_mode || scene.visual_type) as VisualMode;
+    const { output, renderedMode, degraded } = this.renderWithFallback(scene, design, requestedMode);
 
-    const mode = (scene.visual_mode || scene.visual_type) as VisualMode;
-    const visualContentHtml = this.buildVisualContent(scene, mode, design);
-    const customStyles = this.buildCustomStyles(scene, mode, design);
-    const gsapScript = this.buildGsapScript(scene, mode, design);
-    const footerHtml = this.buildFooter(scene, design);
+    console.log(
+      `[SCENE-GEN] Composing ${scene.id} [${renderedMode}]` +
+        (degraded ? ` (degraded from ${requestedMode}: ${degraded})` : "")
+    );
 
-    const fullHtml = `<!DOCTYPE html>
+    const shellVariant = hashInt(`${scene.id}:${renderedMode}`) % 3;
+    const layoutSignature = `${output.signature}|shell=${shellVariant}`;
+    const beats = this.normalizeBeats(scene);
+    const rhythm = this.measureRhythm(beats, output.html);
+
+    const fullHtml = this.buildDocument({ scene, design, output, renderedMode, shellVariant, beats });
+    writeFileSync(htmlPath, fullHtml, "utf-8");
+
+    writeFileSync(
+      metaPath,
+      JSON.stringify(
+        {
+          sceneId: scene.id,
+          fingerprint,
+          requestedMode,
+          renderedMode,
+          layoutSignature,
+          degraded,
+          duration: scene.duration,
+          beats: beats.length,
+          rhythm,
+          dataPoints: scene.data_points?.length ?? 0,
+          sourceReferences: scene.source_references?.length ?? 0,
+          onScreenText: scene.on_screen_text,
+          renderedAt: new Date().toISOString()
+        },
+        null,
+        2
+      ),
+      "utf-8"
+    );
+
+    return {
+      sceneId: scene.id,
+      htmlPath,
+      metaPath,
+      fingerprint,
+      reused: false,
+      renderedMode,
+      layoutSignature,
+      degraded,
+      rhythm
+    };
+  }
+
+  /**
+   * Renders the requested mode, degrading along the fallback chain when the mode's data
+   * is missing. Degrading is always preferable to inventing data to fill a chart.
+   */
+  private renderWithFallback(
+    scene: StoryboardScene,
+    design: ChannelDesign,
+    requestedMode: VisualMode
+  ): { output: PrimitiveOutput; renderedMode: VisualMode; degraded?: string } {
+    const attempt = (mode: VisualMode) => {
+      const primitive = PRIMITIVE_REGISTRY[mode];
+      if (!primitive) return null;
+      return primitive({ scene, design, variant: hashInt(scene.id + mode) });
+    };
+
+    const first = attempt(requestedMode);
+    if (first && !first.insufficientData) {
+      return { output: first, renderedMode: requestedMode };
+    }
+
+    const reason = first?.insufficientData ?? `no primitive registered for "${requestedMode}"`;
+
+    for (const fallback of FALLBACK_CHAIN) {
+      if (fallback === requestedMode) continue;
+      const out = attempt(fallback);
+      if (out && !out.insufficientData) {
+        console.warn(`[SCENE-GEN] ${scene.id}: ${reason} Falling back to "${fallback}".`);
+        return { output: out, renderedMode: fallback, degraded: reason };
+      }
+    }
+
+    throw new Error(
+      `[SCENE-GEN] Scene ${scene.id} cannot be rendered: ${reason} and every fallback also ` +
+        `lacked usable content. The Visual Director must supply data for this scene.`
+    );
+  }
+
+  /** Sorted, clamped beats; a scene with none gets a single establishing beat. */
+  private normalizeBeats(scene: StoryboardScene): VisualBeat[] {
+    const dur = scene.duration;
+    const sorted = [...(scene.beats ?? [])]
+      .sort((a, b) => a.startOffset - b.startOffset)
+      .map((b) => ({
+        ...b,
+        startOffset: Math.max(0, Math.min(b.startOffset, dur)),
+        endOffset: Math.max(0, Math.min(b.endOffset, dur))
+      }))
+      .filter((b) => b.endOffset > b.startOffset);
+    if (sorted.length === 0) {
+      return [
+        {
+          beatId: "beat-1",
+          startOffset: 0,
+          endOffset: dur,
+          purpose: scene.narrative_purpose ?? "Establish",
+          visualChange: scene.visual_description,
+          changeType: "establish"
+        }
+      ];
+    }
+    return sorted;
+  }
+
+  /** Measures what the beats actually do, for visual QA (spec V2.2 §14). */
+  private measureRhythm(beats: VisualBeat[], html: string): SceneRhythmMetrics {
+    const isChange = (b: VisualBeat) => b.changeType !== "hold";
+    const states = new Set(beats.map((b) => (b.visualState || b.visualChange || "").trim()).filter(Boolean));
+
+    let longest = 0;
+    let runStart = beats[0]?.startOffset ?? 0;
+    for (let i = 0; i < beats.length; i++) {
+      const b = beats[i];
+      const next = beats[i + 1];
+      // A hold extends the current no-change run; any other beat starts a new one.
+      if (!isChange(b) && i > 0) {
+        // continue run
+      } else {
+        runStart = b.startOffset;
+      }
+      const runEnd = next ? next.startOffset : b.endOffset;
+      longest = Math.max(longest, runEnd - runStart);
+    }
+
+    let justified = 0;
+    let unjustified = 0;
+    for (const b of beats) {
+      const len = b.endOffset - b.startOffset;
+      if (len > LONG_BEAT_GUIDELINE_SECONDS || b.changeType === "hold") {
+        if (b.holdJustification && b.holdJustification.trim().length > 0) justified++;
+        else unjustified++;
+      }
+    }
+
+    let focusChanges = 0;
+    for (let i = 1; i < beats.length; i++) {
+      const prev = beats[i - 1].focus?.primary?.trim();
+      const cur = beats[i].focus?.primary?.trim();
+      if (prev && cur && prev !== cur) focusChanges++;
+    }
+
+    const groups = new Set(Array.from(html.matchAll(/data-beat-seq="(\d+)"/g)).map((m) => m[1])).size;
+
+    return {
+      beatCount: beats.length,
+      visualStateChangeCount: beats.filter(isChange).length,
+      uniqueVisualStates: states.size,
+      longestNoChangeInterval: Math.round(longest * 100) / 100,
+      justifiedLongBeats: justified,
+      unjustifiedLongBeats: unjustified,
+      focusChanges,
+      changeTypes: [...new Set(beats.map((b) => b.changeType).filter((t): t is NonNullable<typeof t> => !!t))],
+      beatSequencedGroups: groups
+    };
+  }
+
+  private buildDocument(params: {
+    scene: StoryboardScene;
+    design: ChannelDesign;
+    output: PrimitiveOutput;
+    renderedMode: VisualMode;
+    shellVariant: number;
+    beats: VisualBeat[];
+  }): string {
+    const { scene, design, output, renderedMode, shellVariant, beats } = params;
+    const hasHeadline = scene.on_screen_text.trim().length > 0;
+    const sources = scene.source_references ?? [];
+
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>${scene.id} - ${scene.on_screen_text}</title>
+  <title>${esc(scene.id)}${hasHeadline ? ` - ${esc(scene.on_screen_text)}` : ""}</title>
   <style>
-    @font-face {
-      font-family: 'Inter';
-      src: local('Inter'), local('Inter-Regular'), local('sans-serif');
-      font-weight: 100 900;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'JetBrains Mono';
-      src: local('JetBrains Mono'), local('JetBrainsMono-Regular'), local('monospace');
-      font-weight: 100 800;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'Fira Code';
-      src: local('Fira Code'), local('FiraCode-Regular'), local('monospace');
-      font-weight: 300 700;
-      font-display: swap;
-    }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: 100%;
@@ -106,7 +306,7 @@ export class SceneCompositionGenerator {
       overflow: hidden;
       background-color: ${design.colors.background};
       color: ${design.colors.text};
-      font-family: ${design.typography.fontFamilyBody}, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: ${design.typography.fontFamilyBody};
       -webkit-font-smoothing: antialiased;
     }
 
@@ -114,712 +314,270 @@ export class SceneCompositionGenerator {
       width: ${design.canvas.width}px;
       height: ${design.canvas.height}px;
       position: relative;
-      background: radial-gradient(circle at 50% 20%, ${design.colors.backgroundElevated} 0%, ${design.colors.background} 85%);
       overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      row-gap: 34px;
       padding: ${design.canvas.safeZone.top}px ${design.canvas.safeZone.right}px ${design.canvas.safeZone.bottom}px ${design.canvas.safeZone.left}px;
+      background-color: ${design.colors.background};
     }
 
-    .ambient-glow-left {
-      position: absolute;
-      top: -20%;
-      left: -10%;
-      width: 800px;
-      height: 800px;
-      background: radial-gradient(circle, rgba(0, 245, 255, 0.08) 0%, transparent 70%);
-      pointer-events: none;
-      filter: blur(80px);
-    }
+    /* Shell variants shift emphasis and alignment so compositions do not share one
+       layout signature across the documentary (spec sections 20, 24). */
+    .shell-0 .s-head { align-items: flex-start; }
+    .shell-1 .s-head { align-items: flex-start; border-left: 2px solid ${design.colors.primary}; padding-left: 24px; }
+    .shell-2 { grid-template-rows: 1fr auto auto; }
+    .shell-2 .s-head { order: 2; }
+    .shell-2 .s-stage { order: 1; }
 
-    .ambient-glow-right {
-      position: absolute;
-      bottom: -20%;
-      right: -10%;
-      width: 900px;
-      height: 900px;
-      background: radial-gradient(circle, rgba(138, 43, 226, 0.09) 0%, transparent 70%);
-      pointer-events: none;
-      filter: blur(90px);
+    .s-head { display: flex; flex-direction: column; gap: 12px; z-index: 5; }
+    .s-eyebrow {
+      font-family: ${design.typography.fontFamilyCode};
+      font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: ${design.colors.textFaint};
     }
-
-    .cad-grid {
-      position: absolute;
-      inset: 0;
-      background-image: 
-        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-      background-size: 80px 80px;
-      background-position: center center;
-      pointer-events: none;
-      z-index: 1;
+    .s-headline {
+      font-family: ${design.typography.fontFamilyDisplay};
+      font-size: ${design.typography.scale.h2};
+      font-weight: ${design.typography.weights.bold};
+      line-height: 1.12; letter-spacing: -0.015em;
+      color: ${design.colors.text}; max-width: 30ch;
     }
-
-    .doc-header {
-      z-index: 10;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid ${design.colors.surfaceBorder};
-      padding-bottom: 16px;
+    .s-stage { display: flex; align-items: center; min-height: 0; z-index: 4; }
+    .s-foot {
+      display: flex; justify-content: space-between; align-items: flex-end;
+      border-top: 1px solid ${design.colors.surfaceBorder}; padding-top: 16px;
+      font-family: ${design.typography.fontFamilyCode}; font-size: 13px;
+      color: ${design.colors.textFaint}; letter-spacing: 0.05em; z-index: 5;
     }
+    .s-sources { max-width: 70%; }
 
-    .doc-meta-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
+    /* Beat emphasis: a highlighted group reads first; everything else recedes. This is
+       eye-trace by contrast, not decoration (spec V2.2 §11). */
+    .beat-dim { opacity: 0.38; }
+    .beat-emphasis { opacity: 1; }
 
-    .series-title {
-      font-family: ${design.typography.fontFamilyCode}, monospace;
-      font-size: 14px;
-      color: #94a3b8;
-      letter-spacing: 2.5px;
-      text-transform: uppercase;
-    }
-
-    .category-tag {
-      background: rgba(0, 245, 255, 0.12);
-      border: 1px solid rgba(0, 245, 255, 0.35);
-      color: ${design.colors.primary};
-      font-family: ${design.typography.fontFamilyCode}, monospace;
-      font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 4px;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      font-weight: 700;
-    }
-
-    .telemetry-indicator {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-family: ${design.typography.fontFamilyCode}, monospace;
-      font-size: 12px;
-      color: #00ff88;
-      letter-spacing: 1.5px;
-    }
-
-    .pulse-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #00ff88;
-      box-shadow: 0 0 12px #00ff88;
-    }
-
-    .headline-block {
-      z-index: 10;
-      margin-top: 18px;
-      margin-bottom: 20px;
-    }
-
-    .headline-block h1 {
-      font-size: ${design.typography.scale.h1};
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      line-height: 1.1;
-      text-transform: uppercase;
-      color: #ffffff;
-      margin-bottom: 8px;
-    }
-
-    .headline-block h1 .accent-hit {
-      color: ${design.colors.primary};
-      text-shadow: 0 0 35px rgba(0, 245, 255, 0.3);
-    }
-
-    .headline-sub {
-      font-size: 20px;
-      color: ${design.colors.textMuted};
-      font-weight: 400;
-      max-width: 1400px;
-      line-height: 1.4;
-    }
-
-    .visual-viewport {
-      z-index: 10;
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-      margin: 10px 0;
-    }
-
-    .doc-footer {
-      z-index: 10;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-top: 1px solid ${design.colors.surfaceBorder};
-      padding-top: 14px;
-      font-family: ${design.typography.fontFamilyCode}, monospace;
-      font-size: 12px;
-      color: #94a3b8;
-      letter-spacing: 1px;
-    }
-
-    .doc-footer-source {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .source-label {
-      color: #94a3b8;
-      font-weight: 700;
-    }
-
-    .source-data {
-      color: ${design.colors.primary};
-      background: rgba(0, 245, 255, 0.08);
-      padding: 3px 8px;
-      border-radius: 4px;
-      border: 1px solid rgba(0, 245, 255, 0.2);
-    }
-
-    .glass-card {
-      background: rgba(22, 25, 36, 0.75);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: ${design.visualStyles.cardBorderRadius};
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    }
-
-    ${customStyles}
+    ${output.css}
   </style>
   <script src="assets/gsap.min.js"></script>
 </head>
 <body>
-  <div id="root" data-composition-id="${scene.id}" data-start="0" data-duration="${scene.duration}" data-fps="${design.canvas.fps}" data-width="${design.canvas.width}" data-height="${design.canvas.height}">
-    <div class="ambient-glow-left" data-layout-allow-overflow></div>
-    <div class="ambient-glow-right" data-layout-allow-overflow></div>
-    <div class="cad-grid"></div>
+  <div id="root" class="shell-${shellVariant}" data-composition-id="${esc(scene.id)}" data-start="0" data-duration="${scene.duration}" data-fps="${design.canvas.fps}" data-width="${design.canvas.width}" data-height="${design.canvas.height}">
 
-    <header class="doc-header">
-      <div class="doc-meta-left">
-        <span class="series-title">SPECIAL INVESTIGATION // SILICON ECONOMICS</span>
-        <span class="category-tag">${(scene.visual_mode || scene.visual_type).toUpperCase()}</span>
-      </div>
-      <div class="telemetry-indicator">
-        <div class="pulse-dot"></div>
-        <span>LIVE TELEMETRY // ACT-${scene.chapter || "I"} // ${(scene.duration).toFixed(1)}S</span>
-      </div>
+    <header class="s-head">
+      ${scene.chapter ? `<div class="s-eyebrow" id="s-eyebrow">${esc(scene.chapter)}</div>` : ""}
+      ${hasHeadline ? `<h1 class="s-headline" id="s-headline">${esc(scene.on_screen_text)}</h1>` : ""}
     </header>
 
-    <div class="headline-block">
-      <h1 id="scene-headline"><span class="accent-hit">${scene.on_screen_text}</span></h1>
-      <div id="scene-subhead" class="headline-sub">${scene.visual_description}</div>
-    </div>
-
-    <main class="visual-viewport" id="viewport">
-      ${visualContentHtml}
+    <main class="s-stage" id="s-stage">
+      ${output.html}
     </main>
 
-    ${footerHtml}
+    <footer class="s-foot">
+      ${sources.length > 0 ? `<div class="s-sources">${esc(sources.join("  ·  "))}</div>` : "<div></div>"}
+      <div></div>
+    </footer>
   </div>
 
-  ${gsapScript}
-</body>
-</html>`;
-
-    writeFileSync(htmlPath, fullHtml, "utf-8");
-
-    const meta = {
-      sceneId: scene.id,
-      fingerprint,
-      visualMode: mode,
-      duration: scene.duration,
-      renderedAt: new Date().toISOString()
-    };
-    writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf-8");
-
-    return {
-      sceneId: scene.id,
-      htmlPath,
-      metaPath,
-      fingerprint,
-      reused: false
-    };
-  }
-
-  private buildVisualContent(scene: StoryboardScene, mode: VisualMode, design: ChannelDesign): string {
-    switch (mode) {
-      case "data_visualization":
-      case "chart":
-        return this.renderDataVisualizationPrimitive(scene, design);
-      case "comparison":
-        return this.renderComparisonPrimitive(scene, design);
-      case "timeline":
-      case "historical_sequence":
-        return this.renderTimelinePrimitive(scene, design);
-      case "technical_diagram":
-      case "architecture_diagram":
-        return this.renderTechnicalDiagramPrimitive(scene, design);
-      case "supply_chain_flow":
-      case "process_animation":
-        return this.renderSupplyChainPrimitive(scene, design);
-      case "large_typography":
-      case "kinetic_emphasis":
-      case "abstract_metaphor":
-      default:
-        return this.renderLargeTypographyPrimitive(scene, design);
-    }
-  }
-
-  // PRIMITIVE 1: Data Visualization (Metric Counter + High-Precision SVG Curve)
-  private renderDataVisualizationPrimitive(scene: StoryboardScene, design: ChannelDesign): string {
-    const mainData = scene.data_points?.[0];
-    const metricVal = mainData?.value || "+280%";
-    const metricLabel = mainData?.metric || "Spot Contract Price Surge";
-
-    return `
-      <div class="data-vis-grid">
-        <div class="glass-card metric-hero-panel">
-          <div class="card-eyebrow">EMPIRICAL METRIC ESCALATION</div>
-          <div class="huge-counter" id="main-counter">${metricVal}</div>
-          <div class="metric-caption">${metricLabel}</div>
-          <div class="metric-subdetail">${mainData?.period || "Global Hardware Spot Market Escalation"}</div>
-        </div>
-
-        <div class="glass-card chart-hero-panel">
-          <div class="chart-header">
-            <span class="chart-title">PRICE DISLOCATION TRAJECTORY (INDEX 100 = BASELINE)</span>
-            <span class="chart-status">SYSTEM ANOMALY DETECTED</span>
-          </div>
-          <svg class="data-svg" viewBox="0 0 900 400">
-            <defs>
-              <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#00f5ff" stop-opacity="0.45"/>
-                <stop offset="100%" stop-color="#00f5ff" stop-opacity="0.0"/>
-              </linearGradient>
-            </defs>
-            <line x1="60" y1="340" x2="860" y2="340" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
-            <line x1="60" y1="260" x2="860" y2="260" stroke="rgba(255,255,255,0.06)" stroke-width="1" stroke-dasharray="4"/>
-            <line x1="60" y1="180" x2="860" y2="180" stroke="rgba(255,255,255,0.06)" stroke-width="1" stroke-dasharray="4"/>
-            <line x1="60" y1="100" x2="860" y2="100" stroke="rgba(255,255,255,0.06)" stroke-width="1" stroke-dasharray="4"/>
-
-            <path id="curveArea" d="M 80 340 Q 300 330 500 240 T 840 70 L 840 340 Z" fill="url(#chartGradient)"/>
-            <path id="curvePath" d="M 80 340 Q 300 330 500 240 T 840 70" fill="none" stroke="#00f5ff" stroke-width="5" stroke-linecap="round"/>
-
-            <circle id="node-1" cx="80" cy="340" r="7" fill="#161924" stroke="#00f5ff" stroke-width="3"/>
-            <circle id="node-2" cx="500" cy="240" r="7" fill="#161924" stroke="#00f5ff" stroke-width="3"/>
-            <circle id="node-3" cx="840" cy="70" r="9" fill="#ff007f" stroke="#ffffff" stroke-width="3"/>
-          </svg>
-        </div>
-      </div>
-    `;
-  }
-
-  // PRIMITIVE 2: Architectural Comparison (Wafer / Architecture Split)
-  private renderComparisonPrimitive(scene: StoryboardScene, design: ChannelDesign): string {
-    return `
-      <div class="comparison-container">
-        <div class="glass-card comp-panel left-panel">
-          <div class="panel-header">
-            <span class="panel-tag">CONVENTIONAL ARCHITECTURE</span>
-            <h2>STANDARD DDR5 DRAM</h2>
-          </div>
-          <div class="wafer-display">
-            <svg class="wafer-svg" viewBox="0 0 340 340">
-              <circle cx="170" cy="170" r="160" fill="#0d1117" stroke="rgba(255,255,255,0.2)" stroke-width="3"/>
-              ${this.generateWaferGrid(170, 170, 155, 14)}
-            </svg>
-          </div>
-          <div class="wafer-stats">
-            <div class="stat-box"><span class="k">DIE YIELD</span><span class="v">~1,200 DIES</span></div>
-            <div class="stat-box"><span class="k">PACKAGING</span><span class="v">STANDARD</span></div>
-          </div>
-        </div>
-
-        <div class="penalty-bridge glass-card">
-          <div class="bridge-tag">SILICON CONSUMPTION FACTOR</div>
-          <div class="bridge-number" id="penalty-mult">3.0x</div>
-          <div class="bridge-desc">SURFACE AREA DEFICIT PER EQUIVALENT GIGABYTE</div>
-        </div>
-
-        <div class="glass-card comp-panel right-panel active-focus">
-          <div class="panel-header">
-            <span class="panel-tag accent">ADVANCED AI SILICON</span>
-            <h2>HIGH BANDWIDTH MEMORY (HBM3e)</h2>
-          </div>
-          <div class="wafer-display">
-            <svg class="wafer-svg" viewBox="0 0 340 340">
-              <circle cx="170" cy="170" r="160" fill="#0d1117" stroke="#00f5ff" stroke-width="4"/>
-              ${this.generateWaferGrid(170, 170, 155, 26, "#00f5ff")}
-            </svg>
-          </div>
-          <div class="wafer-stats">
-            <div class="stat-box"><span class="k">DIE YIELD</span><span class="v accent">~380 DIES</span></div>
-            <div class="stat-box"><span class="k">INTERCONNECT</span><span class="v accent">3D TSV STACK</span></div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  // PRIMITIVE 3: Capacity Lockout Timeline
-  private renderTimelinePrimitive(scene: StoryboardScene, design: ChannelDesign): string {
-    return `
-      <div class="timeline-full-layout">
-        <div class="supplier-status-grid">
-          <div class="glass-card supplier-card" id="hynix-card">
-            <div class="supplier-header">
-              <div class="sup-title">SK HYNIX PRODUCTION LINES</div>
-              <div class="status-pill sold-out">ALLOCATION: 100% SOLD OUT</div>
-            </div>
-            <div class="bar-track"><div class="bar-fill full-bar" id="bar-1"></div></div>
-            <div class="supplier-footer-meta">
-              <span>HBM3e / HBM4 CAPACITY</span>
-              <span>COMMITTED THROUGH 2026</span>
-            </div>
-          </div>
-
-          <div class="glass-card supplier-card" id="micron-card">
-            <div class="supplier-header">
-              <div class="sup-title">MICRON TECHNOLOGY FAB CAPACITY</div>
-              <div class="status-pill sold-out">ALLOCATION: 100% PRE-BOOKED</div>
-            </div>
-            <div class="bar-track"><div class="bar-fill full-bar" id="bar-2"></div></div>
-            <div class="supplier-footer-meta">
-              <span>1β HBM3e LINES</span>
-              <span>LOCKED TO TIER-1 HYPERSCALERS</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="glass-card timeline-strip-card">
-          <div class="timeline-title-bar">SUPPLY LOCKOUT HORIZON CHRONOLOGY</div>
-          <div class="strip-container">
-            <div class="time-node" id="tn-1">
-              <div class="node-badge">MID 2024</div>
-              <div class="node-point"></div>
-              <div class="node-desc">Entire 2024 HBM inventory fully booked</div>
-            </div>
-            <div class="time-connector"><div class="con-fill" id="cf-1"></div></div>
-            <div class="time-node" id="tn-2">
-              <div class="node-badge">LATE 2024</div>
-              <div class="node-point"></div>
-              <div class="node-desc">2025 wafer runs sold out in earnings releases</div>
-            </div>
-            <div class="time-connector"><div class="con-fill" id="cf-2"></div></div>
-            <div class="time-node active-node" id="tn-3">
-              <div class="node-badge highlight">2026 HORIZON</div>
-              <div class="node-point pulse"></div>
-              <div class="node-desc">HBM4 allocations locked under multi-year contracts</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  // PRIMITIVE 4: Technical Diagram (Packaging Interposer / Architecture Cross-Section)
-  private renderTechnicalDiagramPrimitive(scene: StoryboardScene, design: ChannelDesign): string {
-    return `
-      <div class="diagram-schematic-grid">
-        <div class="glass-card schematic-main-panel">
-          <div class="schematic-header">
-            <span class="schematic-title">CROSS-SECTION // TSMC CoWoS ADVANCED PACKAGING</span>
-            <span class="schematic-sub">CHIP-ON-WAFER-ON-SUBSTRATE INTEGRATION INTERCONNECT</span>
-          </div>
-
-          <svg class="schematic-svg" viewBox="0 0 1100 480">
-            <rect x="150" y="380" width="800" height="40" rx="4" fill="#1c2130" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
-            <text x="550" y="405" fill="#94a3b8" font-size="14" font-family="JetBrains Mono" text-anchor="middle" letter-spacing="2">PACKAGE SUBSTRATE (ORGANIC BGA)</text>
-
-            <g id="solder-balls">
-              ${Array.from({ length: 24 }).map((_, i) => `<circle cx="${185 + i * 32}" cy="360" r="10" fill="#64748b" stroke="#00f5ff" stroke-width="1.5"/>`).join("")}
-            </g>
-
-            <rect x="220" y="270" width="660" height="70" rx="4" fill="#10192e" stroke="#00f5ff" stroke-width="3"/>
-            <text x="550" y="312" fill="#00f5ff" font-size="16" font-family="JetBrains Mono" font-weight="bold" text-anchor="middle" letter-spacing="3">TSMC SILICON INTERPOSER (PASSIVE WITH HIGH-DENSITY TSVs)</text>
-
-            <g id="pulse-conduits">
-              <line x1="320" y1="270" x2="450" y2="270" stroke="#ff007f" stroke-width="6" stroke-linecap="round"/>
-              <line x1="650" y1="270" x2="780" y2="270" stroke="#ff007f" stroke-width="6" stroke-linecap="round"/>
-            </g>
-
-            <rect x="250" y="80" width="160" height="170" rx="4" fill="#161f38" stroke="#00f5ff" stroke-width="2"/>
-            <text x="330" y="150" fill="#ffffff" font-size="16" font-weight="bold" text-anchor="middle">HBM3e</text>
-            <text x="330" y="175" fill="#94a3b8" font-size="12" text-anchor="middle">12-Hi Stack</text>
-
-            <rect x="440" y="60" width="220" height="190" rx="4" fill="#241638" stroke="#ff007f" stroke-width="3"/>
-            <text x="550" y="150" fill="#ffffff" font-size="18" font-weight="bold" text-anchor="middle">AI PROCESSOR</text>
-            <text x="550" y="175" fill="#ff007f" font-size="13" text-anchor="middle">Compute GPU Die</text>
-
-            <rect x="690" y="80" width="160" height="170" rx="4" fill="#161f38" stroke="#00f5ff" stroke-width="2"/>
-            <text x="770" y="150" fill="#ffffff" font-size="16" font-weight="bold" text-anchor="middle">HBM3e</text>
-            <text x="770" y="175" fill="#94a3b8" font-size="12" text-anchor="middle">12-Hi Stack</text>
-          </svg>
-        </div>
-
-        <div class="glass-card bottleneck-hud-panel">
-          <div class="hud-box">
-            <div class="hud-label">MANUFACTURING BOTTLENECK</div>
-            <div class="hud-highlight" id="choke-metric">52+ WEEKS</div>
-            <div class="hud-sub">ORDER WAIT TIME FOR PACKAGING SLOTS</div>
-          </div>
-          <div class="hud-divider"></div>
-          <div class="hud-box">
-            <div class="hud-label">EXPANSION TIMELINE</div>
-            <div class="hud-val">TSMC AP6 FAB ACTIVE</div>
-            <div class="hud-sub">Capacity remains fully saturated into 2026</div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  // PRIMITIVE 5: Supply Chain & Buffer Collapse
-  private renderSupplyChainPrimitive(scene: StoryboardScene, design: ChannelDesign): string {
-    return `
-      <div class="siphon-layout">
-        <div class="glass-card split-metric-bar">
-          <div class="bar-section ai-allocation">
-            <span class="sec-label">AI FAB REALLOCATION</span>
-            <span class="sec-val">80% OF INCREMENTAL CAPEX</span>
-          </div>
-          <div class="bar-section commodity-allocation">
-            <span class="sec-label">COMMODITY DRAM DEFICIT</span>
-            <span class="sec-val">20% FAB SHARE</span>
-          </div>
-        </div>
-
-        <div class="inventory-drain-grid">
-          <div class="glass-card tank-panel">
-            <div class="tank-title">HISTORICAL BUFFER</div>
-            <div class="tank-display">
-              <div class="tank-liquid normal-liquid"><span class="tank-level-txt">16 WEEKS INVENTORY</span></div>
-            </div>
-            <div class="tank-desc">HEALTHY SUPPLY RESERVE</div>
-          </div>
-
-          <div class="drain-arrow-center">
-            <div class="arrow-shape">⬇</div>
-            <div class="arrow-txt">COLLAPSE</div>
-          </div>
-
-          <div class="glass-card tank-panel alert-tank">
-            <div class="tank-title">CRITICAL RESERVE</div>
-            <div class="tank-display">
-              <div class="tank-liquid depleted-liquid" id="red-tank"><span class="tank-level-txt alert-txt">3 WEEKS INVENTORY</span></div>
-            </div>
-            <div class="tank-desc red-alert">ACUTE SHORTAGE STATUS</div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  // PRIMITIVE 6: Large Typography & Kinetic Synthesis
-  private renderLargeTypographyPrimitive(scene: StoryboardScene, design: ChannelDesign): string {
-    return `
-      <div class="tollbooth-container">
-        <div class="network-diagram-card glass-card">
-          <div class="net-node-left">
-            <div class="node-title">AI HYPERSCALERS</div>
-            <div class="node-val">$50B+ CAPEX DEPLOYMENT</div>
-          </div>
-
-          <div class="tollbooth-gate" id="central-core">
-            <div class="gate-ring"></div>
-            <div class="gate-title">THE SILICON TOLLBOOTH</div>
-            <div class="gate-sub">HBM MEMORY CONTROL</div>
-          </div>
-
-          <div class="net-node-right">
-            <div class="node-title">PHYSICAL COMPUTING</div>
-            <div class="node-val">STARVED CHANNEL SUPPLY</div>
-          </div>
-        </div>
-
-        <div class="glass-card conclusion-box">
-          <div class="kinetic-text-line" id="hit-1">NOT A TEMPORARY SUPPLY HICCUP</div>
-          <div class="kinetic-text-line accent-color" id="hit-2">THE DEFINING SILICON TOLLBOOTH</div>
-          <div class="kinetic-text-line" id="hit-3">OF THE ARTIFICIAL INTELLIGENCE REVOLUTION</div>
-        </div>
-      </div>
-    `;
-  }
-
-  private buildFooter(scene: StoryboardScene, design: ChannelDesign): string {
-    const sources = scene.source_references && scene.source_references.length > 0
-      ? scene.source_references.join(" • ")
-      : "SEMIANALYSIS • TRENDFORCE • BLOOMBERG INTEL";
-
-    return `
-      <footer class="doc-footer">
-        <div class="doc-footer-source">
-          <span class="source-label">EMPIRICAL DATA CITATIONS:</span>
-          <span class="source-data">${sources}</span>
-        </div>
-        <div class="doc-footer-right">
-          <span>CHAPTER: ${scene.chapter || "ANALYSIS"} // AUTHENTICATED AUDIT</span>
-        </div>
-      </footer>
-    `;
-  }
-
-  private generateWaferGrid(cx: number, cy: number, radius: number, step: number, strokeColor: string = "rgba(255,255,255,0.2)"): string {
-    const lines: string[] = [];
-    for (let x = cx - radius; x <= cx + radius; x += step) {
-      const dy = Math.sqrt(Math.max(0, radius * radius - (x - cx) * (x - cx)));
-      lines.push(`<line x1="${x}" y1="${cy - dy}" x2="${x}" y2="${cy + dy}" stroke="${strokeColor}" stroke-width="0.8"/>`);
-    }
-    for (let y = cy - radius; y <= cy + radius; y += step) {
-      const dx = Math.sqrt(Math.max(0, radius * radius - (y - cy) * (y - cy)));
-      lines.push(`<line x1="${cx - dx}" y1="${y}" x2="${cx + dx}" y2="${y}" stroke="${strokeColor}" stroke-width="0.8"/>`);
-    }
-    return lines.join("\n");
-  }
-
-  private buildCustomStyles(scene: StoryboardScene, mode: VisualMode, design: ChannelDesign): string {
-    return `
-      /* Data Vis */
-      .data-vis-grid { display: flex; gap: 30px; width: 100%; height: 100%; }
-      .metric-hero-panel { width: 440px; padding: 36px; display: flex; flex-direction: column; justify-content: center; }
-      .huge-counter { font-size: 88px; font-weight: 900; color: #00f5ff; line-height: 1; margin: 16px 0; }
-      .metric-caption { font-size: 20px; font-weight: 700; color: #ffffff; }
-      .metric-subdetail { font-size: 14px; color: #94a3b8; margin-top: 8px; font-family: ${design.typography.fontFamilyCode}; }
-      .chart-hero-panel { flex: 1; padding: 30px; display: flex; flex-direction: column; }
-      .chart-header { display: flex; justify-content: space-between; font-family: ${design.typography.fontFamilyCode}; font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
-      .chart-status { color: #ff007f; font-weight: 700; }
-      .data-svg { width: 100%; height: 100%; }
-
-      /* Comparison */
-      .comparison-container { display: flex; gap: 24px; width: 100%; height: 100%; align-items: center; }
-      .comp-panel { flex: 1; padding: 24px; height: 100%; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
-      .panel-tag { font-family: ${design.typography.fontFamilyCode}; font-size: 12px; color: #94a3b8; letter-spacing: 2px; }
-      .panel-tag.accent { color: #00f5ff; }
-      .wafer-display { width: 300px; height: 300px; margin: 10px auto; }
-      .wafer-stats { display: flex; gap: 16px; width: 100%; justify-content: center; font-family: ${design.typography.fontFamilyCode}; font-size: 13px; }
-      .stat-box .accent { color: #00f5ff; font-weight: bold; }
-      .penalty-bridge { width: 260px; padding: 20px; text-align: center; }
-      .bridge-tag { font-size: 11px; color: #94a3b8; font-family: ${design.typography.fontFamilyCode}; }
-      .bridge-number { font-size: 64px; font-weight: 900; color: #ff007f; }
-      .bridge-desc { font-size: 11px; color: #94a3b8; }
-
-      /* Timeline */
-      .timeline-full-layout { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 24px; }
-      .supplier-status-grid { display: flex; gap: 24px; }
-      .supplier-card { flex: 1; padding: 20px; }
-      .supplier-header { display: flex; justify-content: space-between; font-size: 13px; font-family: ${design.typography.fontFamilyCode}; margin-bottom: 12px; }
-      .status-pill.sold-out { color: #ffffff; background: #b91c1c; padding: 3px 8px; border-radius: 4px; font-weight: bold; }
-      .bar-track { height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; margin-bottom: 8px; }
-      .bar-fill.full-bar { height: 100%; width: 100%; background: #00f5ff; }
-      .supplier-footer-meta { display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; font-family: ${design.typography.fontFamilyCode}; }
-      .timeline-strip-card { flex: 1; padding: 24px; display: flex; flex-direction: column; justify-content: center; }
-      .timeline-title-bar { font-size: 12px; color: #94a3b8; font-family: ${design.typography.fontFamilyCode}; margin-bottom: 24px; }
-      .strip-container { display: flex; align-items: center; justify-content: space-between; padding: 0 40px; }
-      .time-node { text-align: center; }
-      .node-badge { font-size: 13px; color: #00f5ff; font-family: ${design.typography.fontFamilyCode}; margin-bottom: 8px; }
-      .node-point { width: 14px; height: 14px; border-radius: 50%; background: #00f5ff; margin: 0 auto 8px; }
-      .node-desc { font-size: 13px; color: #ffffff; max-width: 220px; }
-      .time-connector { flex: 1; height: 3px; background: rgba(255,255,255,0.1); margin: 0 16px; }
-
-      /* Schematic */
-      .diagram-schematic-grid { display: flex; gap: 24px; width: 100%; height: 100%; }
-      .schematic-main-panel { flex: 1; padding: 20px; display: flex; flex-direction: column; }
-      .schematic-header { margin-bottom: 16px; }
-      .schematic-title { font-size: 14px; color: #00f5ff; font-family: ${design.typography.fontFamilyCode}; font-weight: bold; }
-      .schematic-sub { font-size: 12px; color: #94a3b8; }
-      .schematic-svg { width: 100%; height: 100%; }
-      .bottleneck-hud-panel { width: 340px; padding: 30px; display: flex; flex-direction: column; justify-content: space-around; }
-      .hud-label { font-size: 12px; color: #94a3b8; font-family: ${design.typography.fontFamilyCode}; }
-      .hud-highlight { font-size: 52px; font-weight: 900; color: #ff007f; margin: 8px 0; }
-      .hud-sub { font-size: 12px; color: #94a3b8; }
-      .hud-val { font-size: 18px; font-weight: bold; color: #00f5ff; margin: 6px 0; }
-
-      /* Siphon */
-      .siphon-layout { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 24px; }
-      .split-metric-bar { display: flex; height: 70px; border-radius: 8px; overflow: hidden; }
-      .bar-section.ai-allocation { flex: 4; background: rgba(0,245,255,0.15); border-right: 2px solid #00f5ff; padding: 12px 20px; }
-      .bar-section.commodity-allocation { flex: 1; background: rgba(255,0,127,0.15); padding: 12px 20px; }
-      .inventory-drain-grid { flex: 1; display: flex; gap: 24px; align-items: center; }
-      .tank-panel { flex: 1; height: 100%; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; }
-      .tank-display { width: 160px; height: 220px; border: 2px solid rgba(255,255,255,0.2); border-radius: 8px; position: relative; overflow: hidden; display: flex; align-items: flex-end; }
-      .tank-liquid.normal-liquid { width: 100%; height: 80%; background: #00f5ff; display: flex; align-items: center; justify-content: center; }
-      .tank-liquid.depleted-liquid { width: 100%; height: 25%; background: #b91c1c; display: flex; align-items: center; justify-content: center; }
-      .tank-level-txt { font-size: 12px; font-weight: bold; color: #ffffff; }
-      .drain-arrow-center { text-align: center; font-size: 28px; color: #ff007f; }
-
-      /* Typography / Tollbooth */
-      .tollbooth-container { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 24px; }
-      .network-diagram-card { flex: 1; display: flex; justify-content: space-around; align-items: center; padding: 24px; }
-      .tollbooth-gate { width: 220px; height: 220px; border-radius: 50%; border: 3px solid #ff007f; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 0 40px rgba(255,0,127,0.3); }
-      .conclusion-box { padding: 28px; text-align: center; }
-      .kinetic-text-line { font-size: 28px; font-weight: 800; color: #ffffff; line-height: 1.3; }
-      .kinetic-text-line.accent-color { color: #00f5ff; }
-    `;
-  }
-
-  private buildGsapScript(scene: StoryboardScene, mode: VisualMode, design: ChannelDesign): string {
-    const dur = scene.duration;
-
-    return `
   <script>
     window.__timelines = window.__timelines || {};
     const tl = gsap.timeline({ paused: true });
-    window.__timelines["${scene.id}"] = tl;
+    window.__timelines["${esc(scene.id)}"] = tl;
+    const EASE = "${design.motion.easeDefault}";
 
-    // Timeline padding to guarantee authoritative duration
-    tl.to({}, { duration: ${dur} }, 0);
+    // Hold the full scene duration so the composition never ends before the narration.
+    tl.to({}, { duration: ${scene.duration} }, 0);
 
-    // Camera ambient push
-    tl.to("#root", { scale: 1.02, duration: ${dur}, ease: "none" }, 0);
+    ${hasHeadline ? `tl.from("#s-headline", { opacity: 0, y: 16, duration: 0.7, ease: EASE }, 0.05);` : ""}
+    ${scene.chapter ? `tl.from("#s-eyebrow", { opacity: 0, duration: 0.5 }, 0);` : ""}
 
-    // Headline entrance
-    tl.from("#scene-headline", { opacity: 0, y: 25, duration: 0.8, ease: "${design.motion.easeDefault}" }, 0.1);
-    tl.from("#scene-subhead", { opacity: 0, y: 15, duration: 0.8, ease: "${design.motion.easeDefault}" }, 0.3);
+    // ---- Primitive entrance (its own internal choreography) ----
+${output.gsap}
 
-    // Primitive animations based on mode
-    ${this.getModeSpecificGsapScript(mode, dur)}
+${this.buildBeatSchedule(beats, scene, design, output.html)}
   </script>
-    `;
+</body>
+</html>`;
   }
 
-  private getModeSpecificGsapScript(mode: VisualMode, dur: number): string {
-    switch (mode) {
-      case "data_visualization":
-      case "chart":
-        return `
-          tl.from("#curvePath", { strokeDashoffset: 1200, strokeDasharray: 1200, duration: 1.8, ease: "power2.out" }, 0.5);
-          tl.from("#curveArea", { opacity: 0, duration: 1.5, ease: "power2.out" }, 0.8);
-          tl.from("#main-counter", { scale: 0.9, opacity: 0, duration: 0.9, ease: "back.out(1.7)" }, 0.4);
-        `;
-      case "comparison":
-        return `
-          tl.from(".left-panel", { x: -40, opacity: 0, duration: 0.9, ease: "power3.out" }, 0.3);
-          tl.from(".right-panel", { x: 40, opacity: 0, duration: 0.9, ease: "power3.out" }, 0.5);
-          tl.from("#penalty-mult", { scale: 0, opacity: 0, duration: 0.8, ease: "elastic.out(1, 0.75)" }, 0.8);
-        `;
-      case "timeline":
-      case "historical_sequence":
-        return `
-          tl.from("#hynix-card", { y: 30, opacity: 0, duration: 0.8 }, 0.3);
-          tl.from("#micron-card", { y: 30, opacity: 0, duration: 0.8 }, 0.5);
-          tl.from(".time-node", { opacity: 0, scale: 0.8, stagger: 0.3, duration: 0.7 }, 0.8);
-        `;
-      case "technical_diagram":
-      case "architecture_diagram":
-        return `
-          tl.from(".schematic-main-panel", { opacity: 0, scale: 0.95, duration: 1.0 }, 0.3);
-          tl.from("#choke-metric", { scale: 1.2, opacity: 0, duration: 0.8, ease: "back.out(1.5)" }, 0.7);
-        `;
-      case "supply_chain_flow":
-      case "process_animation":
-        return `
-          tl.from(".split-metric-bar", { opacity: 0, y: -20, duration: 0.8 }, 0.2);
-          tl.from("#red-tank", { height: "70%", duration: 1.5, ease: "power2.inOut" }, 0.6);
-        `;
-      default:
-        return `
-          tl.from(".kinetic-text-line", { opacity: 0, y: 20, stagger: 0.4, duration: 0.9, ease: "power3.out" }, 0.4);
-        `;
+  /**
+   * Turns beats into timeline events so the visual state evolves with the narration
+   * (spec V2.2 §9-§12).
+   *
+   *  - Element groups tagged data-beat-seq="N" are hidden at t=0 and revealed at beat N's
+   *    start, so a five-row chart builds row by row as the narration reaches each value
+   *    instead of appearing all at once and holding for 25 seconds.
+   *  - `highlight` / `compare` beats dim everything except the group for that beat.
+   *  - `zoom` / `pan` beats move the camera for that beat only; other beats stay still.
+   *  - `hold` beats schedule nothing: a hold is a deliberate absence of change.
+   *
+   * When a primitive exposes fewer groups than there are beats, later beats fall back to
+   * emphasis shifts so there is still a visible reason to look.
+   */
+  /**
+   * Distributes the primitive's element groups across the reveal beats so that every
+   * group is on screen by the time the last revealing beat lands, whether the primitive
+   * exposed more groups than there are beats or fewer. Returns, per beat, the inclusive
+   * range [from, to) of group sequence numbers that beat reveals; `to` of the final
+   * revealing beat always equals the group count.
+   */
+  static distributeGroups(groupCount: number, beats: VisualBeat[]): Array<[number, number]> {
+    const revealing = beats.map((b, i) => i).filter((i) => beats[i].changeType !== "hold");
+    const ranges: Array<[number, number]> = beats.map(() => [0, 0]);
+    if (groupCount <= 0 || revealing.length === 0) return ranges;
+    const n = revealing.length;
+    revealing.forEach((beatIdx, k) => {
+      const from = Math.round((k * groupCount) / n);
+      const to = k === n - 1 ? groupCount : Math.round(((k + 1) * groupCount) / n);
+      ranges[beatIdx] = [from, Math.max(from, to)];
+    });
+    return ranges;
+  }
+
+  private buildBeatSchedule(beats: VisualBeat[], scene: StoryboardScene, design: ChannelDesign, html: string): string {
+    if (beats.length <= 1) {
+      return `    // single beat: the primitive's entrance is the establishing state`;
     }
+
+    // Group count is known at generation time, so the group→beat mapping is computed here
+    // and emitted as data. The runtime never has to guess how many groups exist.
+    const groupCount = new Set(Array.from(html.matchAll(/data-beat-seq="(\d+)"/g)).map((m) => m[1])).size;
+    const ranges = SceneCompositionGenerator.distributeGroups(groupCount, beats);
+
+    const lines: string[] = [];
+    lines.push(`    // ---- Beat schedule (${beats.length} beats, ${groupCount} element groups) ----`);
+    lines.push(`    const groups = Array.from(document.querySelectorAll("[data-beat-seq]"));`);
+    lines.push(`    const seqOf = (g) => Number(g.getAttribute("data-beat-seq"));`);
+    lines.push(`    const inRange = (from, to) => groups.filter(g => seqOf(g) >= from && seqOf(g) < to);`);
+    lines.push(`    // Per-beat reveal ranges [from, to) over group sequence numbers.`);
+    lines.push(`    const RANGES = ${JSON.stringify(ranges)};`);
+    lines.push(``);
+    // Everything beyond the first beat's range is held back until its beat arrives.
+    // The primitive's own entrance still animates the first range.
+    const firstTo = ranges[0]?.[1] ?? 0;
+    if (groupCount > firstTo) {
+      lines.push(`    { const later = inRange(${firstTo}, ${groupCount}); if (later.length) gsap.set(later, { opacity: 0 }); }`);
+      lines.push(``);
+    }
+
+    beats.forEach((b, i) => {
+      const t = Math.max(0, Math.round(b.startOffset * 100) / 100);
+      const len = Math.max(0.2, b.endOffset - b.startOffset);
+      const type = b.changeType ?? (i === 0 ? "establish" : "reveal");
+      const [from, to] = ranges[i];
+      // Groups revealed by the end of this beat; emphasis never touches anything beyond it.
+      const revealedThrough = Math.max(to, ...ranges.slice(0, i + 1).map((r) => r[1]));
+      const label = `${b.beatId} ${type}${b.narrationReference ? ` — ${b.narrationReference}` : ""}`;
+      lines.push(`    // beat ${i + 1}/${beats.length} @ ${t}s (${len.toFixed(1)}s): ${this.jsComment(label)} | reveals [${from},${to})`);
+
+      if (type === "hold") {
+        lines.push(`    // hold: no visual change by design${b.holdJustification ? ` (${this.jsComment(b.holdJustification)})` : ""}`);
+        return;
+      }
+
+      if (i > 0 && to > from) {
+        lines.push(`    tl.to(inRange(${from}, ${to}), { opacity: 1, y: 0, duration: 0.6, ease: EASE, stagger: 0.08 }, ${t});`);
+      } else if (i > 0 && groupCount > 0) {
+        // More beats than groups: nothing new to reveal, so this beat shifts emphasis to
+        // the most recently revealed group instead so there is still a reason to look.
+        lines.push(`    tl.to(inRange(0, ${revealedThrough}), { opacity: 0.38, duration: 0.5 }, ${t});`);
+        lines.push(`    tl.to(inRange(${Math.max(0, revealedThrough - 1)}, ${revealedThrough}), { opacity: 1, duration: 0.5 }, ${t});`);
+      }
+
+      switch (type) {
+        case "highlight":
+        case "compare": {
+          // Dim only what is already on screen, then lift this beat's groups.
+          const focusFrom = to > from ? from : Math.max(0, revealedThrough - 1);
+          const focusTo = to > from ? to : revealedThrough;
+          lines.push(`    if (${revealedThrough} > 1) {`);
+          lines.push(`      tl.to(inRange(0, ${revealedThrough}), { opacity: 0.38, duration: 0.45, ease: EASE }, ${t + 0.1});`);
+          lines.push(`      tl.to(inRange(${focusFrom}, ${focusTo}), { opacity: 1, duration: 0.45, ease: EASE }, ${t + 0.1});`);
+          lines.push(`    }`);
+          break;
+        }
+        case "resolve":
+        case "reframe":
+          // Bring everything revealed so far back to equal weight for the payoff.
+          lines.push(`    tl.to(inRange(0, ${revealedThrough}), { opacity: 1, duration: 0.6, ease: EASE }, ${t});`);
+          break;
+        case "zoom":
+          lines.push(`    tl.fromTo("#s-stage", { scale: 1 }, { scale: 1.04, duration: ${len.toFixed(2)}, ease: "none" }, ${t});`);
+          break;
+        case "pan":
+          lines.push(`    tl.fromTo("#s-stage", { xPercent: -0.8 }, { xPercent: 0.8, duration: ${len.toFixed(2)}, ease: "none" }, ${t});`);
+          break;
+        case "remove": {
+          const prevFrom = ranges[i - 1]?.[0] ?? 0;
+          const prevTo = ranges[i - 1]?.[1] ?? 0;
+          if (prevTo > prevFrom) lines.push(`    tl.to(inRange(${prevFrom}, ${prevTo}), { opacity: 0.2, duration: 0.5, ease: EASE }, ${t});`);
+          break;
+        }
+        default:
+          break;
+      }
+    });
+
+    // Scene-level camera directive applies only when no beat took the camera.
+    const beatTookCamera = beats.some((b) => b.changeType === "zoom" || b.changeType === "pan");
+    if (!beatTookCamera) {
+      lines.push(``);
+      lines.push(this.buildCameraMotion(scene, design));
+    }
+
+    return lines.join("\n");
+  }
+
+  private jsComment(s: string): string {
+    return s.replace(/\*\//g, "* /").replace(/\r?\n/g, " ").slice(0, 160);
+  }
+
+  /**
+   * Camera motion is applied only when the Visual Director asked for it. A default
+   * push-in on every scene is exactly the templated look the spec forbids.
+   */
+  private buildCameraMotion(scene: StoryboardScene, design: ChannelDesign): string {
+    const camera = (scene.camera || "static").toLowerCase();
+    if (camera.includes("static")) return "    // camera: static (no motion)";
+
+    const dur = scene.duration;
+    if (camera.includes("push") || camera.includes("zoom-in") || camera.includes("zoom in")) {
+      return `    tl.fromTo("#s-stage", { scale: 1 }, { scale: 1.035, duration: ${dur}, ease: "none" }, 0);`;
+    }
+    if (camera.includes("pull") || camera.includes("zoom-out") || camera.includes("zoom out")) {
+      return `    tl.fromTo("#s-stage", { scale: 1.035 }, { scale: 1, duration: ${dur}, ease: "none" }, 0);`;
+    }
+    if (camera.includes("pan right")) {
+      return `    tl.fromTo("#s-stage", { xPercent: -1.2 }, { xPercent: 1.2, duration: ${dur}, ease: "none" }, 0);`;
+    }
+    if (camera.includes("pan left")) {
+      return `    tl.fromTo("#s-stage", { xPercent: 1.2 }, { xPercent: -1.2, duration: ${dur}, ease: "none" }, 0);`;
+    }
+    if (camera.includes("drift down")) {
+      return `    tl.fromTo("#s-stage", { yPercent: -1 }, { yPercent: 1, duration: ${dur}, ease: "none" }, 0);`;
+    }
+    if (camera.includes("drift up")) {
+      return `    tl.fromTo("#s-stage", { yPercent: 1 }, { yPercent: -1, duration: ${dur}, ease: "none" }, 0);`;
+    }
+    return "    // camera: unrecognised directive, held static";
+  }
+
+  /** Copies the GSAP bundle next to the compositions so renders need no network. */
+  private ensureGsap(outputDir: string, repoRoot: string): void {
+    const assetsDir = join(outputDir, "assets");
+    mkdirSync(assetsDir, { recursive: true });
+    const localGsap = join(assetsDir, "gsap.min.js");
+    if (existsSync(localGsap)) return;
+
+    for (const candidate of [
+      resolve(outputDir, "node_modules/gsap/dist/gsap.min.js"),
+      resolve(repoRoot, "node_modules/gsap/dist/gsap.min.js")
+    ]) {
+      if (existsSync(candidate)) {
+        copyFileSync(candidate, localGsap);
+        return;
+      }
+    }
+    console.warn(`[SCENE-GEN] GSAP bundle not found; compositions will not animate.`);
   }
 }

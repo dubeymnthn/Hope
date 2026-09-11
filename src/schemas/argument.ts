@@ -4,11 +4,28 @@ import { FactCategoryEnum } from "./research.js";
 export const ClaimStrengthEnum = z.enum(["strong", "moderate", "weak"]);
 export type ClaimStrength = z.infer<typeof ClaimStrengthEnum>;
 
+/**
+ * V2.3 (spec §24): the Argument Agent must explicitly distinguish how well-supported each
+ * claim is. UNSUPPORTED claims may still appear (flagged as such) but must never be
+ * asserted as settled fact downstream — enforced editorially via the script brief's
+ * prohibitions, the same free-text-prohibition mechanism every other stage already uses.
+ */
+export const EvidenceStatusEnum = z.enum(["SUPPORTED", "PLAUSIBLE", "UNCERTAIN", "DISPUTED", "UNSUPPORTED"]);
+export type EvidenceStatus = z.infer<typeof EvidenceStatusEnum>;
+
 export const SupportingClaimSchema = z.object({
   claim: z.string().describe("Core assertion or supporting thesis claim"),
   evidence: z.array(z.string()).describe("Direct references to research facts or source data"),
   category: FactCategoryEnum.describe("Factual rigor category"),
-  strength: ClaimStrengthEnum.describe("Assessed strength of empirical backing")
+  strength: ClaimStrengthEnum.describe("Assessed strength of empirical backing"),
+  evidenceStatus: EvidenceStatusEnum.optional().describe(
+    "V2.3: SUPPORTED/PLAUSIBLE/UNCERTAIN/DISPUTED/UNSUPPORTED — set when an evidence graph is available"
+  ),
+  evidenceIds: z
+    .array(z.string())
+    .optional()
+    .default([])
+    .describe("evidence-graph.json claimId/evidenceId references backing this claim, when available")
 });
 export type SupportingClaim = z.infer<typeof SupportingClaimSchema>;
 

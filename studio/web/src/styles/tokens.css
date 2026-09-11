@@ -1,0 +1,112 @@
+/* ============================================================================
+   DOCUMENTARY STUDIO — DESIGN TOKENS
+   ----------------------------------------------------------------------------
+   Single source of truth for every color, type, spacing, radius, motion and
+   shadow value used across the app. Every other stylesheet (components.css,
+   and any page-specific <style> blocks written by the Editor / Research /
+   Audio builders) MUST consume these custom properties instead of introducing
+   new hard-coded values. If a new token is genuinely needed, add it here with
+   a one-line comment, do not invent a local one-off in a page file.
+
+   This file only ever defines custom properties on :root (plus a reserved
+   [data-theme] hook). It contains no element selectors and produces no
+   visible output on its own.
+   ============================================================================ */
+
+:root {
+  /* --- Color: surfaces (darkest to most elevated) ------------------------- */
+  --bg: #0E0F11;             /* app background, very dark charcoal */
+  --panel: #161719;          /* panel surfaces (topbar, cards, sidebars) */
+  --surface-2: #1D1F22;      /* elevated/secondary surface: hover rows, inputs */
+  --surface-3: #24262A;      /* further elevated: popovers, dropdowns, modals */
+  --border: #2A2C30;         /* default low-contrast border */
+  --border-strong: #3A3D42;  /* stronger border for emphasis, still restrained */
+
+  /* --- Color: text (high to low emphasis) --------------------------------- */
+  --text: #EDEDEF;           /* primary text, high contrast */
+  --text-secondary: #9A9CA3; /* muted secondary text */
+  --text-tertiary: #6B6E74;  /* lowest emphasis text, e.g. disabled */
+
+  /* --- Color: accent (single restrained warm copper/amber) ---------------- */
+  --accent: #C68A4E;         /* selection, playhead, links, primary controls */
+  --accent-muted: #C68A4E33; /* accent @ low opacity: subtle bg / selected-row tint */
+  --accent-contrast: #1A1206;/* text color to place ON TOP of a solid accent fill */
+
+  /* --- Color: semantic status ---------------------------------------------- */
+  --success: #5FAE7A;        /* valid / complete */
+  --warning: #D9B65B;        /* needs review */
+  --danger: #D9685F;         /* blocked / error */
+  --info: #6C9BFF;           /* rare — informational accents distinct from --accent */
+
+  /* --- Legacy variable bridges for compatibility --- */
+  --bg-0: var(--bg);
+  --bg-1: var(--panel);
+  --bg-2: var(--surface-2);
+  --bg-3: var(--surface-3);
+  --text-0: var(--text);
+  --text-1: var(--text-secondary);
+  --text-2: var(--text-tertiary);
+  --accent-dim: var(--accent-muted);
+  --green: var(--success);
+  --yellow: var(--warning);
+  --red: var(--danger);
+  --mono: var(--font-mono);
+  --sans: var(--font-ui);
+
+  /* --- Typography: families -------------------------------------------------
+     Loaded via Google Fonts <link> tags (identical on every page). Usage is
+     intentionally narrow — see the two rules below. Do not use --font-display
+     or --font-mono outside of them. */
+  --font-display: 'Source Serif 4', Georgia, serif; /* project titles / hero ONLY */
+  --font-ui: 'Inter', -apple-system, sans-serif;     /* everything functional */
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace; /* timestamps/ids/filenames/metrics ONLY */
+
+  /* --- Typography: type scale (dense pro-tool baseline, not marketing 16px) */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --text-3xl: 34px;
+
+  /* --- Spacing (4px rhythm) ------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+
+  /* --- Radius (restrained; pill-shape reserved for true pills e.g. badges) - */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* --- Motion ---------------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+  --dur-slow: 380ms;
+
+  /* --- Shadows (subtle only, never a glow) ------------------------------------ */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+  /* --- Layout ------------------------------------------------------------------ */
+  --topbar-h: 48px;
+  --nav-w: 200px;
+  --nav-w-collapsed: 56px;
+}
+
+/* Reserved hook for a future light/alt theme. The app is dark-only today —
+   do not add [data-theme="light"] overrides speculatively; this selector
+   only exists so a future theme switch doesn't require touching every
+   consumer of these tokens. */
+[data-theme='dark'] {
+  color-scheme: dark;
+}

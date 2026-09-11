@@ -54,7 +54,8 @@ export function computeSceneFingerprint(params: SceneHashParams): string {
     storyboardVersion = configVer.storyboardGenerator
   } = params;
   
-  // Deterministic canonical payload
+  // Deterministic canonical payload. Everything that changes the rendered HTML must be
+  // here, or a plan edit would silently reuse a stale composition (spec V2.2 §2E).
   const canonical = {
     videoId,
     sceneId: scene.id,
@@ -63,6 +64,24 @@ export function computeSceneFingerprint(params: SceneHashParams): string {
     onScreenText: scene.on_screen_text.trim(),
     visualType: scene.visual_mode || scene.visual_type,
     duration: Math.round(scene.duration * 100) / 100,
+    camera: (scene.camera || "").trim(),
+    // Beats drive the GSAP schedule and emphasis; mode payloads drive what is drawn.
+    beats: (scene.beats ?? []).map((b) => [
+      b.beatId,
+      Math.round(b.startOffset * 100) / 100,
+      Math.round(b.endOffset * 100) / 100,
+      b.changeType ?? "",
+      b.visualState ?? "",
+      b.focus?.primary ?? "",
+      b.holdJustification ? 1 : 0
+    ]),
+    dataPoints: (scene.data_points ?? []).map((d) => [d.metric, d.value, d.unit ?? "", d.period ?? ""]),
+    diagramNodes: scene.diagram_nodes ?? [],
+    diagramEdges: scene.diagram_edges ?? [],
+    timelineEvents: (scene.timeline_events ?? []).map((e) => [e.when, e.label, e.detail ?? ""]),
+    comparisonSides: (scene.comparison_sides ?? []).map((c) => [c.label, c.value ?? "", c.detail ?? ""]),
+    sourceReferences: scene.source_references ?? [],
+    chapter: scene.chapter ?? "",
     designVersion,
     generatorVersion,
     storyboardVersion

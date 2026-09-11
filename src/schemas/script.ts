@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+/**
+ * V2.3 (spec §25): a structured, evidence-traceable claim carried by a scene, as opposed
+ * to the legacy free-text `claims: string[]`. Every factual sentence that cites this
+ * should be resolvable to real evidence-graph.json ids — enforced by the claim-gate's
+ * new "Claim -> Evidence Traceability" check (src/agents/script-qa.ts), which only runs
+ * when `scriptClaims` is populated and an evidence graph was supplied.
+ */
+export const ScriptClaimSchema = z.object({
+  scriptClaimId: z.string(),
+  claimText: z.string().min(1),
+  evidenceIds: z.array(z.string()).min(1).describe("evidence-graph.json claimId/evidenceId references"),
+  confidence: z.number().min(0).max(1),
+  narrativeRole: z.string().describe("Why this claim appears here, e.g. 'establishes the central tension'"),
+  visualOpportunityId: z.string().optional().describe("visual-evidence-map.json visualOpportunityId, if this claim has one")
+});
+export type ScriptClaim = z.infer<typeof ScriptClaimSchema>;
+
 export const ScriptSceneSchema = z.object({
   id: z.string().describe("Unique scene identifier, e.g. scene-001"),
   narration: z.string().describe("Spoken voiceover text for this scene beat"),
@@ -9,6 +26,11 @@ export const ScriptSceneSchema = z.object({
   wordCount: z.number().optional().describe("Word count of the spoken voiceover"),
   estimatedDurationSeconds: z.number().optional().describe("Estimated spoken duration in seconds at ~150 wpm"),
   claims: z.array(z.string()).optional().default([]).describe("Key claims or fact citations supported in this scene"),
+  scriptClaims: z
+    .array(ScriptClaimSchema)
+    .optional()
+    .default([])
+    .describe("V2.3: structured, evidence-id-traceable claims for this scene (no orphan factual claims)"),
   visualMode: z.string().optional().describe("Intended visual mode (e.g. data_visualization, technical_diagram, comparison)")
 });
 export type ScriptScene = z.infer<typeof ScriptSceneSchema>;

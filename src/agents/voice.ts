@@ -8,12 +8,24 @@ import { FFmpegService } from "../media/ffmpeg.js";
 import { SubtitleGenerator } from "../media/subtitles.js";
 
 interface SceneAudioCacheEntry {
+  /** Scene-level checkpoint record (spec section 31). */
   sceneId: string;
+  status: "complete";
   narrationHash: string;
   audioPath: string;
   duration: number;
   generationTimeMs: number;
   completedAt: string;
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "unknown";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.round(seconds % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 export class VoiceAgent {
@@ -23,8 +35,18 @@ export class VoiceAgent {
     this.chatterbox = new ChatterboxTTS(options);
   }
 
-  async generate(scenes: ScriptScene[], outputDir: string): Promise<AudioTimestamps> {
+  async generate(
+    scenes: ScriptScene[],
+    outputDir: string,
+    planning?: { wordsPerMinute: number; source: "calibration" | "legacy-estimate" }
+  ): Promise<AudioTimestamps> {
     console.log(`[VOICE] Synthesizing speech narration with Chatterbox for ${scenes.length} scenes (resumable mode)...`);
+    // Measurement counters for this run (spec V2.2 §3, §21). Reused scenes are excluded
+    // from throughput so the real-time factor reflects work actually done.
+    let scenesReused = 0;
+    let scenesSynthesized = 0;
+    let synthesisMs = 0;
+    let audioSecondsGenerated = 0;
     const audioDir = join(outputDir, "audio");
     mkdirSync(audioDir, { recursive: true });
 
@@ -43,6 +65,23 @@ export class VoiceAgent {
     const generationDurations: number[] = [];
     let currentTime = 0;
 
+    // The resident worker session is opened lazily: a fully cached run never pays the
+    // model load cost at all.
+    let session: Awaited<ReturnType<ChatterboxTTS["openSession"]>> | null = null;
+    const getSession = async () => {
+      if (!session) {
+        console.log(
+          `[VOICE] Loading Chatterbox model into a resident session on ` +
+            `${this.chatterbox.getDevice()} (one load for this run)...`
+        );
+        const t0 = Date.now();
+        session = await this.chatterbox.openSession();
+        console.log(`[VOICE] Model ready in ${((Date.now() - t0) / 1000).toFixed(1)}s.`);
+      }
+      return session;
+    };
+
+    try {
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
       const audioPath = join(audioDir, `${scene.id}.wav`);
@@ -62,6 +101,7 @@ export class VoiceAgent {
               if (!cache[scene.id]) {
                 cache[scene.id] = {
                   sceneId: scene.id,
+                  status: "complete",
                   narrationHash,
                   audioPath,
                   duration: sceneDuration,
@@ -78,27 +118,36 @@ export class VoiceAgent {
       }
 
       if (isCached) {
+        scenesReused++;
         console.log(`[TTS ${i + 1}/${scenes.length}] Scene: ${scene.id} — Reusing cached valid audio (${sceneDuration.toFixed(2)}s).`);
       } else {
         const startTime = Date.now();
         console.log(`[TTS ${i + 1}/${scenes.length}] Synthesizing Scene: ${scene.id} ("${scene.narration.slice(0, 50)}...")...`);
 
-        await this.chatterbox.synthesize({
-          text: scene.narration,
-          voiceId: "am_adam",
-          language: "en",
-          outputFilePath: audioPath
-        });
+        const live = await getSession();
+        await live.synthesize(scene.narration, audioPath);
 
         const elapsedMs = Date.now() - startTime;
         generationDurations.push(elapsedMs);
+        scenesSynthesized++;
+        synthesisMs += elapsedMs;
 
         const probe = await FFmpegService.probe(audioPath);
         sceneDuration = probe.duration > 0 ? probe.duration : 4.0;
+        audioSecondsGenerated += sceneDuration;
 
-        // Record in cache
+        // Validate the WAV before checkpointing it, so a truncated file is never
+        // treated as a completed scene on resume.
+        if (!probe.hasAudio || sceneDuration < 0.2) {
+          throw new Error(
+            `[VOICE] Synthesis for ${scene.id} produced no usable audio ` +
+              `(duration ${sceneDuration}s). Not checkpointing; re-run to retry this scene.`
+          );
+        }
+
         cache[scene.id] = {
           sceneId: scene.id,
+          status: "complete",
           narrationHash,
           audioPath,
           duration: sceneDuration,
@@ -107,13 +156,21 @@ export class VoiceAgent {
         };
         writeFileSync(cacheFilePath, JSON.stringify(cache, null, 2), "utf-8");
 
-        // Calculate running ETA
+        // Running progress and ETA, measured from this run's own throughput.
         const remainingScenes = scenes.length - (i + 1);
-        const avgTimePerScene = generationDurations.reduce((a, b) => a + b, 0) / generationDurations.length;
+        const avgTimePerScene =
+          generationDurations.reduce((a, b) => a + b, 0) / generationDurations.length;
         const etaSeconds = Math.round((remainingScenes * avgTimePerScene) / 1000);
         const progressPct = Math.round(((i + 1) / scenes.length) * 100);
+        const realtimeFactor = elapsedMs / 1000 / Math.max(0.01, sceneDuration);
 
-        console.log(`[TTS ${i + 1}/${scenes.length}] Scene: ${scene.id} | Audio duration: ${sceneDuration.toFixed(2)}s | Gen time: ${(elapsedMs / 1000).toFixed(1)}s | Progress: ${progressPct}% | ETA: ~${etaSeconds}s`);
+        console.log(
+          `[TTS ${i + 1}/${scenes.length}] Scene: ${scene.id}\n` +
+            `  Audio duration:      ${sceneDuration.toFixed(2)}s\n` +
+            `  Generation time:     ${(elapsedMs / 1000).toFixed(1)}s (${realtimeFactor.toFixed(1)}x real-time)\n` +
+            `  Overall progress:    ${progressPct}% (${i + 1}/${scenes.length} scenes)\n` +
+            `  Estimated remaining: ${formatDuration(etaSeconds)}`
+        );
       }
 
       // Word-level timestamps across the scene duration
@@ -137,6 +194,11 @@ export class VoiceAgent {
       currentTime += sceneDuration;
       sceneAudioPaths.push(audioPath);
     }
+    } finally {
+      // Always release the worker, including when a scene throws mid-run. Scenes
+      // completed before the failure stay checkpointed and are reused on re-run.
+      if (session) await (session as any).close();
+    }
 
     // Concatenate all scene wavs into master audio/narration.wav
     const finalAudioPath = join(audioDir, "narration.wav");
@@ -145,12 +207,42 @@ export class VoiceAgent {
     const totalProbe = await FFmpegService.probe(finalAudioPath);
     const totalDuration = totalProbe.duration > 0 ? totalProbe.duration : currentTime;
 
+    // What this run actually measured (spec V2.2 §3, §21). The planning rate is recorded
+    // alongside the measured rate so drift between them is visible and recalibratable.
+    const totalWords = scenes.reduce(
+      (acc, s) => acc + s.narration.trim().split(/\s+/).filter(Boolean).length,
+      0
+    );
+    const roundedTotal = Math.round(totalDuration * 100) / 100;
+    const measuredWpm = roundedTotal > 0 ? Math.round((totalWords / (roundedTotal / 60)) * 10) / 10 : 0;
+    const synthesisSeconds = Math.round(synthesisMs / 100) / 10;
+    const plan = planning ?? { wordsPerMinute: 150, source: "legacy-estimate" as const };
+
     const audioResult: AudioTimestamps = {
       audioPath: finalAudioPath,
       sampleRate: 24000,
-      totalDuration: Math.round(totalDuration * 100) / 100,
-      sentences: sentenceTimestamps
+      totalDuration: roundedTotal,
+      sentences: sentenceTimestamps,
+      measurement: {
+        totalWords,
+        measuredWordsPerMinute: measuredWpm,
+        planningWordsPerMinute: plan.wordsPerMinute,
+        planningRateSource: plan.source,
+        device: this.chatterbox.getDevice(),
+        scenesSynthesized,
+        scenesReused,
+        synthesisSeconds,
+        realtimeFactor:
+          audioSecondsGenerated > 0 ? Math.round((synthesisSeconds / audioSecondsGenerated) * 100) / 100 : undefined,
+        measuredAt: new Date().toISOString()
+      }
     };
+
+    console.log(
+      `[VOICE] Measured ${totalWords} words over ${roundedTotal}s = ${measuredWpm} wpm ` +
+        `(planned at ${plan.wordsPerMinute} wpm, ${plan.source}); ` +
+        `${scenesReused} reused, ${scenesSynthesized} synthesised on ${this.chatterbox.getDevice()}`
+    );
 
     // Save audio/timestamps.json
     const timestampsPath = join(audioDir, "timestamps.json");

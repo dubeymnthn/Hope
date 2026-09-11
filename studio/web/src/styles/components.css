@@ -1,0 +1,876 @@
+/* ============================================================================
+   DOCUMENTARY STUDIO — components.css  (README)
+   ----------------------------------------------------------------------------
+   This is the SHARED component stylesheet. All four builders (Foundation,
+   Editor, Research/Script, Audio/Search/QA/Export) load this file and reuse
+   the class names below VERBATIM. Do not rename or fork these classes in a
+   page-specific stylesheet — if something is missing, extend this file and
+   note the addition in this header so the other builders know it exists.
+
+   Load order on every page (plain <script>/<link>, no bundler):
+     1. <link tokens.css>       — CSS variables (colors/type/space/motion)
+     2. <link components.css>  — this file
+     3. <script mock-data.js>  — window.DOC_STUDIO_DATA
+     4. <script shell.js>      — window.DocStudioShell + window.Icons
+     5. page-specific inline/external script, ends with DocStudioShell.mount(id)
+
+   CONVENTIONS
+   - Every value referenced here comes from tokens.css custom properties.
+     Never hard-code a hex color, px size, or duration in this file.
+   - Status is never color-only: pair a badge/dot with a text label or a
+     distinct icon shape (see .badge, .status-dot usage notes below).
+   - Hover changes BACKGROUND only, never text color (see .nav-item, .icon-btn).
+   - Radius is restrained (--radius-sm/md/lg). The only true pill shapes are
+     .badge and .kbd-style chips — do not make cards/buttons pill-shaped.
+   - Focus rings: every interactive element gets a 2px solid var(--accent)
+     outline with 2px offset via :focus-visible. This is enforced globally
+     near the top of this file — you should not need to redeclare it, but if
+     you add a new custom interactive element, make sure it inherits or
+     matches this treatment.
+
+   SECTION INDEX
+     1. Base / reset
+     2. Global focus-visible ring
+     3. App shell chrome (topbar + left nav) — markup is injected by shell.js,
+        styled here so shell.js itself stays markup-only.
+     4. Buttons & icon buttons             — .btn, .btn-primary, .btn-secondary, .icon-btn
+     5. Panels                             — .panel, .panel-header
+     6. Tabs                               — .tabs, .tab, .tab.active
+     7. Segmented control                  — .segmented, .segmented-option
+     8. Inputs                             — .input, .search-input
+     9. Badges & status dot                — .badge(+variants), .status-dot(+variants)
+    10. Tooltip (CSS-only)                 — [data-tooltip] / .tooltip
+    11. Dropdown                           — .dropdown, .dropdown-menu
+    12. Slider                             — .slider
+    13. Metric row (with optional sparkbar)— .metric-row, .sparkbar
+    14. Modal                              — .modal-overlay, .modal
+    15. Toast                              — .toast
+    16. Inspector row                      — .inspector-row
+    17. Kbd chip                           — .kbd
+   ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   1. Base / reset
+--------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+}
+
+svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   2. Global focus-visible ring
+   Applies to every native interactive element plus our custom classes so a
+   keyboard user always sees exactly one consistent focus treatment.
+--------------------------------------------------------------------------- */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+.btn:focus-visible,
+.icon-btn:focus-visible,
+.tab:focus-visible,
+.segmented-option:focus-visible,
+.nav-item:focus-visible,
+.search-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   3. App shell chrome (topbar + left nav)
+   HTML for these is injected at runtime by DocStudioShell.mount() in
+   scripts/shell.js into #app-shell-topbar and #app-shell-nav. Every page
+   also needs a <main class="app-main"> for its own content — its padding
+   is reserved here to sit below the topbar and beside the nav, and adjusts
+   automatically when the nav is collapsed via body[data-nav-collapsed].
+--------------------------------------------------------------------------- */
+.app-main {
+  padding-top: var(--topbar-h);
+  padding-left: var(--nav-w);
+  min-height: 100vh;
+  transition: padding-left var(--dur-base) var(--ease-out);
+}
+
+body[data-nav-collapsed='true'] .app-main {
+  padding-left: var(--nav-w-collapsed);
+}
+
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--topbar-h);
+  z-index: 100;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 0 var(--space-4);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.topbar-project {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.topbar-project-name {
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.topbar-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+#app-shell-nav {
+  position: relative;
+  z-index: 90;
+}
+
+.app-nav {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0;
+  bottom: 0;
+  width: var(--nav-w);
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+  transition: width var(--dur-base) var(--ease-out);
+  overflow: hidden;
+}
+
+.app-nav[data-collapsed='true'] {
+  width: var(--nav-w-collapsed);
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--space-2);
+}
+
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 34px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Hover changes background only — text keeps its existing color. */
+.nav-item:hover {
+  background: var(--surface-2);
+}
+
+.nav-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.nav-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-item.active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.app-nav[data-collapsed='true'] .nav-item-label {
+  display: none;
+}
+
+.app-nav[data-collapsed='true'] .nav-item {
+  justify-content: center;
+  padding: 0;
+}
+
+.nav-collapse-toggle {
+  margin: var(--space-2) var(--space-2) 0;
+  align-self: stretch;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.nav-collapse-toggle:hover {
+  background: var(--surface-2);
+}
+
+.nav-collapse-toggle svg {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.app-nav[data-collapsed='true'] .nav-collapse-toggle svg {
+  transform: rotate(180deg);
+}
+
+/* ---------------------------------------------------------------------------
+   4. Buttons & icon buttons
+--------------------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.btn-primary:hover {
+  background: #d3985c;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.btn-secondary:hover {
+  background: var(--surface-2);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* Hover changes background only — icon color is unchanged. */
+.icon-btn:hover {
+  background: var(--surface-2);
+}
+
+/* ---------------------------------------------------------------------------
+   5. Panels
+--------------------------------------------------------------------------- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.panel-body {
+  padding: var(--space-4);
+}
+
+/* ---------------------------------------------------------------------------
+   6. Tabs
+--------------------------------------------------------------------------- */
+.tabs {
+  display: flex;
+  gap: var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  position: relative;
+  padding: var(--space-3) 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tab.active {
+  color: var(--text);
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* ---------------------------------------------------------------------------
+   7. Segmented control
+--------------------------------------------------------------------------- */
+.segmented {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.segmented-option {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.segmented-option:hover {
+  background: var(--surface-3);
+}
+
+.segmented-option.active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* ---------------------------------------------------------------------------
+   8. Inputs
+--------------------------------------------------------------------------- */
+.input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  height: 32px;
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.input:hover {
+  border-color: var(--border-strong);
+}
+
+.search-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  height: 32px;
+  width: 100%;
+  max-width: 420px;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.search-input:hover {
+  border-color: var(--border-strong);
+}
+
+.search-input-icon {
+  display: flex;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.search-input-text {
+  flex: 1;
+  text-align: left;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-input .kbd {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   9. Badges & status dot
+   Status is never color-only: a badge always carries a text label (PASS /
+   WARNING / FAIL, etc), and a .status-dot is always paired with a text
+   label next to it wherever it's used.
+--------------------------------------------------------------------------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.badge-success {
+  color: var(--success);
+  background: rgba(95, 174, 122, 0.12);
+  border-color: rgba(95, 174, 122, 0.35);
+}
+
+.badge-warning {
+  color: var(--warning);
+  background: rgba(217, 182, 91, 0.12);
+  border-color: rgba(217, 182, 91, 0.35);
+}
+
+.badge-danger {
+  color: var(--danger);
+  background: rgba(217, 104, 95, 0.12);
+  border-color: rgba(217, 104, 95, 0.35);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.status-dot-accent {
+  background: var(--accent);
+}
+.status-dot-success {
+  background: var(--success);
+}
+.status-dot-warning {
+  background: var(--warning);
+}
+.status-dot-danger {
+  background: var(--danger);
+}
+
+/* ---------------------------------------------------------------------------
+   10. Tooltip (CSS-only)
+   Usage: add data-tooltip="Label text" to any element. Add the .tooltip
+   class too if the element is not already position:relative (e.g. inline
+   icons) — .tooltip simply establishes position:relative.
+--------------------------------------------------------------------------- */
+.tooltip {
+  position: relative;
+}
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, -6px);
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+  z-index: 1000;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   11. Dropdown
+--------------------------------------------------------------------------- */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 200px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-1);
+  display: none;
+  flex-direction: column;
+  z-index: 150;
+}
+
+.dropdown-menu.open {
+  display: flex;
+}
+
+.dropdown-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  background: transparent;
+  border: none;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.dropdown-menu-item:hover {
+  background: var(--surface-2);
+}
+
+.dropdown-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-1) 0;
+}
+
+/* ---------------------------------------------------------------------------
+   12. Slider
+   A plain range input restyled to match the app (used for scrub bars,
+   volume, zoom, etc). Track uses --surface-2, fill/thumb use --accent.
+--------------------------------------------------------------------------- */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+
+.slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+}
+
+/* ---------------------------------------------------------------------------
+   13. Metric row (compact metadata line with optional inline sparkbar)
+--------------------------------------------------------------------------- */
+.metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.metric-row:last-child {
+  border-bottom: none;
+}
+
+.metric-row-label {
+  color: var(--text-secondary);
+}
+
+.metric-row-value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.sparkbar {
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sparkbar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   14. Modal
+--------------------------------------------------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal {
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-5);
+  min-width: 360px;
+  max-width: 560px;
+}
+
+/* ---------------------------------------------------------------------------
+   15. Toast
+--------------------------------------------------------------------------- */
+.toast {
+  position: fixed;
+  bottom: var(--space-5);
+  right: var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--text);
+  z-index: 300;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---------------------------------------------------------------------------
+   16. Inspector row (label left, value/control right — dense metadata line)
+--------------------------------------------------------------------------- */
+.inspector-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.inspector-row-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+}
+
+.inspector-row-value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------------
+   17. Kbd chip (small keyboard-key indicator for shortcut hints)
+--------------------------------------------------------------------------- */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+}

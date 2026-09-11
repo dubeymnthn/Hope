@@ -15,7 +15,8 @@ export class VisualSceneAgent {
     storyboard: StoryboardResult,
     design: ChannelDesign,
     designVersion: string,
-    outputDir: string
+    outputDir: string,
+    repoRoot?: string
   ): Promise<GenerationResult[]> {
     console.log(`[VISUAL-SCENE] Generating visual compositions for ${storyboard.scenes.length} storyboard scenes...`);
 
@@ -24,13 +25,21 @@ export class VisualSceneAgent {
       const res = await this.generator.generateScene(scene, {
         design,
         designVersion,
-        outputDir
+        outputDir,
+        repoRoot
       });
       results.push(res);
     }
 
     // Build Master HyperFrames Composition (index.html + hyperframes.json)
     this.buildMasterComposition(storyboard, design, outputDir);
+
+    const reused = results.filter((r) => r.reused).length;
+    const degraded = results.filter((r) => r.degraded).length;
+    console.log(
+      `[VISUAL-SCENE] ${results.length} compositions ready (${reused} reused, ${results.length - reused} rebuilt` +
+        `${degraded > 0 ? `, ${degraded} degraded for missing data` : ""}).`
+    );
 
     return results;
   }
