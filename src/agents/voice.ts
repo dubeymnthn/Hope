@@ -16,6 +16,8 @@ interface SceneAudioCacheEntry {
   duration: number;
   generationTimeMs: number;
   completedAt: string;
+  /** Absent on pre-existing entries; those were all generated at Chatterbox's own 0.5 default. */
+  cfgWeight?: number;
 }
 
 function formatDuration(seconds: number): string {
@@ -40,7 +42,14 @@ export class VoiceAgent {
     outputDir: string,
     planning?: { wordsPerMinute: number; source: "calibration" | "legacy-estimate" }
   ): Promise<AudioTimestamps> {
+    const cfgWeight = this.chatterbox.getCfgWeight();
     console.log(`[VOICE] Synthesizing speech narration with Chatterbox for ${scenes.length} scenes (resumable mode)...`);
+    if (cfgWeight !== 0.5) {
+      console.log(
+        `[VOICE] cfg_weight=${cfgWeight} (via TTS_CFG_WEIGHT, default is 0.5) — ` +
+          `classifier-free guidance ${cfgWeight === 0 ? "disabled" : "reduced"}; expect faster synthesis with a different expressive character.`
+      );
+    }
     // Measurement counters for this run (spec V2.2 §3, §21). Reused scenes are excluded
     // from throughput so the real-time factor reflects work actually done.
     let scenesReused = 0;
@@ -94,11 +103,16 @@ export class VoiceAgent {
         try {
           const probe = await FFmpegService.probe(audioPath);
           if (probe.hasAudio && probe.duration > 0.3) {
-            // If cache entry exists, verify hash; if no cache entry yet, adopt existing valid audio
-            if (!cache[scene.id] || cache[scene.id].narrationHash === narrationHash) {
+            // If cache entry exists, verify hash AND generation params (cfg_weight); if no
+            // cache entry yet, adopt existing valid audio. Entries predating cfg_weight
+            // tracking are treated as the model's own 0.5 default, which is what they were
+            // actually generated with.
+            const entry = cache[scene.id];
+            const entryCfgWeight = entry?.cfgWeight ?? 0.5;
+            if (!entry || (entry.narrationHash === narrationHash && entryCfgWeight === cfgWeight)) {
               isCached = true;
               sceneDuration = probe.duration;
-              if (!cache[scene.id]) {
+              if (!entry) {
                 cache[scene.id] = {
                   sceneId: scene.id,
                   status: "complete",
@@ -106,7 +120,8 @@ export class VoiceAgent {
                   audioPath,
                   duration: sceneDuration,
                   generationTimeMs: 0,
-                  completedAt: new Date().toISOString()
+                  completedAt: new Date().toISOString(),
+                  cfgWeight
                 };
                 writeFileSync(cacheFilePath, JSON.stringify(cache, null, 2), "utf-8");
               }
@@ -152,7 +167,8 @@ export class VoiceAgent {
           audioPath,
           duration: sceneDuration,
           generationTimeMs: elapsedMs,
-          completedAt: new Date().toISOString()
+          completedAt: new Date().toISOString(),
+          cfgWeight
         };
         writeFileSync(cacheFilePath, JSON.stringify(cache, null, 2), "utf-8");
 
@@ -229,6 +245,7 @@ export class VoiceAgent {
         planningWordsPerMinute: plan.wordsPerMinute,
         planningRateSource: plan.source,
         device: this.chatterbox.getDevice(),
+        cfgWeight,
         scenesSynthesized,
         scenesReused,
         synthesisSeconds,

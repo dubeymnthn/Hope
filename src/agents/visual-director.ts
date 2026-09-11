@@ -7,6 +7,8 @@ import { AudioTimestamps } from "../schemas/timestamps.js";
 import { ChannelConfig } from "../schemas/channel.js";
 import { VisualEvidenceMap } from "../schemas/visual-evidence-map.js";
 import { EvidenceGraph } from "../schemas/evidence-graph.js";
+import { ProjectDesignStrategy } from "../schemas/design-strategy.js";
+import { resolveDesignForScene } from "../design/design-resolver.js";
 import { AgentTaskGate, hashArtifact } from "./agent-task.js";
 
 export interface VisualPlanVerification {
@@ -47,8 +49,10 @@ export class VisualDirectorAgent {
     visualEvidenceMap?: VisualEvidenceMap;
     /** V2.3: when supplied, dataPoints[].claimId/sourceId are checked against real graph ids. */
     evidenceGraph?: EvidenceGraph;
+    /** V2.6: editorial/visual PREFERENCE only (never facts) — see design-strategy.ts. */
+    designStrategy?: ProjectDesignStrategy | null;
   }): Promise<VisualPlanVerification> {
-    const { topic, script, audio, research, config, visualEvidenceMap, evidenceGraph } = params;
+    const { topic, script, audio, research, config, visualEvidenceMap, evidenceGraph, designStrategy } = params;
     const outputDir = params.outputDir ?? process.cwd();
 
     const storyboardDir = join(outputDir, "storyboard");
@@ -66,8 +70,20 @@ export class VisualDirectorAgent {
     }));
     writeFileSync(timingPath, JSON.stringify({ totalDuration: audio.totalDuration, scenes: timing }, null, 2), "utf-8");
 
+    // V2.6: TypeScript resolves global->chapter->scene design overrides deterministically
+    // (same "prepare deterministic context for the agent" role as scene-timing.json above)
+    // rather than asking the agent to re-derive override precedence itself.
+    let resolvedDesignPath: string | undefined;
+    if (designStrategy) {
+      resolvedDesignPath = join(storyboardDir, "resolved-design-by-scene.json");
+      const resolved = Object.fromEntries(
+        script.scenes.map((s) => [s.id, resolveDesignForScene(designStrategy, s.chapter, s.id)])
+      );
+      writeFileSync(resolvedDesignPath, JSON.stringify(resolved, null, 2), "utf-8");
+    }
+
     if (!existsSync(planPath)) {
-      this.requestPlan(gate, topic, script, config, "storyboard/visual-plan.json does not exist yet.", visualEvidenceMap);
+      this.requestPlan(gate, topic, script, config, "storyboard/visual-plan.json does not exist yet.", visualEvidenceMap, !!designStrategy);
     }
 
     let validated: VisualPlan;
@@ -80,7 +96,8 @@ export class VisualDirectorAgent {
         script,
         config,
         `Existing storyboard/visual-plan.json is invalid and was rejected: ${err.message}`,
-        visualEvidenceMap
+        visualEvidenceMap,
+        !!designStrategy
       );
     }
 
@@ -101,7 +118,8 @@ export class VisualDirectorAgent {
         `Visual plan does not cover the script exactly.` +
           (missing.length ? ` Missing scenes: ${missing.join(", ")}.` : "") +
           (extra.length ? ` Unknown scenes: ${extra.join(", ")}.` : ""),
-        visualEvidenceMap
+        visualEvidenceMap,
+        !!designStrategy
       );
     }
 
@@ -198,7 +216,8 @@ export class VisualDirectorAgent {
     script: ScriptResult,
     config: ChannelConfig | undefined,
     reason: string,
-    visualEvidenceMap?: VisualEvidenceMap
+    visualEvidenceMap?: VisualEvidenceMap,
+    hasDesignStrategy?: boolean
   ): never {
     const maxConsecutive = config?.editorial?.maxConsecutiveSameVisualMode ?? 2;
     const visualEvidenceGuidance = visualEvidenceMap
@@ -206,6 +225,14 @@ export class VisualDirectorAgent {
         `evidence (visual-evidence/visual-evidence-map.json, attached below). Treat its \`visualMode\`/` +
         `\`visualPurpose\`/\`rationale\` recommendations as authoritative guidance for the matching ` +
         `scenes, unless a scene's real narration genuinely calls for something else.`
+      : "";
+    const designGuidance = hasDesignStrategy
+      ? `\n\nA project design strategy has been interpreted from this project's design.md ` +
+        `(storyboard/resolved-design-by-scene.json, attached below — already resolved global -> ` +
+        `chapter -> scene per scene, the most specific value per field). Treat it as editorial ` +
+        `PREFERENCE only: it may steer which \`visualMode\`/pacing/camera/caption choices you make for ` +
+        `a scene, but it never introduces a fact, number or claim, and it never overrides a hard ` +
+        `evidentiary requirement above.`
       : "";
 
     return gate.request({
@@ -227,7 +254,7 @@ export class VisualDirectorAgent {
         `visual hierarchy. Every element on screen must communicate something.\n\n` +
         `Give longer scenes multiple beats so the frame evolves with the narration. Place beats ` +
         `using the real scene durations, and let timing be editorial rather than a subtitle-driven ` +
-        `slideshow.${visualEvidenceGuidance}`,
+        `slideshow.${visualEvidenceGuidance}${designGuidance}`,
       context: {
         topic,
         sceneCount: script.scenes.length,
@@ -276,6 +303,7 @@ export class VisualDirectorAgent {
         { label: "Research dossier (the only permitted data source)", path: "research/research.json", inline: true },
         { label: "REAL audio timings per scene (authoritative)", path: "storyboard/scene-timing.json", inline: true },
         ...(visualEvidenceMap ? [{ label: "Visual evidence map (recommended modes per claim)", path: "visual-evidence/visual-evidence-map.json", inline: true }] : []),
+        ...(hasDesignStrategy ? [{ label: "Resolved design preference per scene (editorial only, never facts)", path: "storyboard/resolved-design-by-scene.json", inline: true }] : []),
         { label: "Channel visual design tokens", path: "design/channel-design.json" }
       ]
     });

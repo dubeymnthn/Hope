@@ -14,6 +14,7 @@ import { VisualEvidenceMapSchema, VisualEvidenceMap } from "../../../src/schemas
 import { StoryboardResultSchema, StoryboardResult } from "../../../src/schemas/storyboard.js";
 import { AudioTimestampsSchema, AudioTimestamps } from "../../../src/schemas/timestamps.js";
 import { ChannelConfigSchema, ChannelConfig } from "../../../src/schemas/channel.js";
+import { ProjectDesignStrategySchema, ProjectDesignStrategy } from "../../../src/schemas/design-strategy.js";
 
 /**
  * Safe, optional artifact reads: every function here returns the parsed artifact, or
@@ -61,6 +62,11 @@ export function readProjectArtifacts(projectDir: string): ProjectArtifacts {
     audio: readOptional(join(projectDir, "audio/timestamps.json"), AudioTimestampsSchema),
     config: readOptional(join(projectDir, "config/channel.json"), ChannelConfigSchema)
   };
+}
+
+/** V2.6: design.md's structured interpretation, when a project has one (optional). */
+export function readOptionalDesignStrategy(projectDir: string): ProjectDesignStrategy | null {
+  return readOptional(join(projectDir, "design/design-strategy.json"), ProjectDesignStrategySchema);
 }
 
 // --- Non-schema-validated artifacts (QA reports, pipeline state, raw JSON caches) ---

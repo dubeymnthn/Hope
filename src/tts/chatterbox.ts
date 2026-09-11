@@ -4,13 +4,18 @@ import { ChatterboxWorkerClient, ChatterboxSession } from "./worker-client.js";
 export class ChatterboxTTS implements TTSProvider {
   private client: ChatterboxWorkerClient;
 
-  constructor(options?: { pythonPath?: string; device?: string }) {
+  constructor(options?: { pythonPath?: string; device?: string; cfgWeight?: number }) {
     this.client = new ChatterboxWorkerClient(options);
   }
 
   /** The local compute device synthesis runs on. */
   getDevice(): string {
     return this.client.getDevice();
+  }
+
+  /** The classifier-free-guidance weight synthesis runs with. */
+  getCfgWeight(): number {
+    return this.client.getCfgWeight();
   }
 
   async synthesize(request: TTSRequest): Promise<TTSResult> {

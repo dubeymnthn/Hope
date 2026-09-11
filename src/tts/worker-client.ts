@@ -2,15 +2,17 @@ import { spawn, ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, writeFileSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { TTSRequest, TTSResult } from "./provider.js";
-import { resolveTtsDevice, resolvePythonForDevice, venvPython, TtsDevice } from "../system/runtime.js";
+import { resolveTtsDevice, resolvePythonForDevice, resolveTtsCfgWeight, venvPython, TtsDevice } from "../system/runtime.js";
 
 export class ChatterboxWorkerClient {
   private pythonPath: string;
   private workerScript: string;
   private device: string;
+  private cfgWeight: number;
 
-  constructor(options?: { pythonPath?: string; workerScript?: string; device?: string }) {
+  constructor(options?: { pythonPath?: string; workerScript?: string; device?: string; cfgWeight?: number }) {
     this.device = options?.device || ChatterboxWorkerClient.resolveDevice();
+    this.cfgWeight = options?.cfgWeight ?? resolveTtsCfgWeight().cfgWeight;
     this.pythonPath =
       options?.pythonPath || ChatterboxWorkerClient.resolveVenvPython(process.cwd(), this.device);
     this.workerScript = options?.workerScript || resolve(process.cwd(), "src/tts/chatterbox_worker.py");
@@ -51,7 +53,8 @@ export class ChatterboxWorkerClient {
       this.workerScript,
       "--text", request.text,
       "--output", outputPath,
-      "--device", this.device
+      "--device", this.device,
+      "--cfg-weight", String(this.cfgWeight)
     ];
 
     const stdout = await this.runProcess(args);
@@ -68,9 +71,10 @@ export class ChatterboxWorkerClient {
    * then synthesises scene by scene, so long-form runs pay the load cost a single time
    * while the caller still validates and checkpoints each scene individually.
    */
-  async openSession(options?: { device?: string; readyTimeoutMs?: number }): Promise<ChatterboxSession> {
+  async openSession(options?: { device?: string; cfgWeight?: number; readyTimeoutMs?: number }): Promise<ChatterboxSession> {
     return ChatterboxSession.start(this.pythonPath, this.workerScript, {
       device: options?.device ?? this.device,
+      cfgWeight: options?.cfgWeight ?? this.cfgWeight,
       readyTimeoutMs: options?.readyTimeoutMs
     });
   }
@@ -78,6 +82,11 @@ export class ChatterboxWorkerClient {
   /** The device synthesis will run on, for logging. */
   public getDevice(): string {
     return this.device;
+  }
+
+  /** The classifier-free-guidance weight synthesis will run with, for logging/cache-keying. */
+  public getCfgWeight(): number {
+    return this.cfgWeight;
   }
 
   async synthesizeBatch(items: Array<{ id: string; text: string; output: string }>): Promise<Array<TTSResult & { id: string }>> {
@@ -88,7 +97,8 @@ export class ChatterboxWorkerClient {
       const args = [
         this.workerScript,
         "--batch-json", tempJson,
-        "--device", this.device
+        "--device", this.device,
+        "--cfg-weight", String(this.cfgWeight)
       ];
 
       const stdout = await this.runProcess(args, 1800000); // 30 mins timeout
@@ -205,12 +215,21 @@ export class ChatterboxSession {
   static async start(
     pythonPath: string,
     workerScript: string,
-    options?: { device?: string; readyTimeoutMs?: number }
+    options?: { device?: string; cfgWeight?: number; readyTimeoutMs?: number }
   ): Promise<ChatterboxSession> {
-    const child = spawn(pythonPath, [workerScript, "--serve", "--device", options?.device || "cpu"], {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, TQDM_DISABLE: "1", PYTHONUNBUFFERED: "1" }
-    }) as ChildProcessWithoutNullStreams;
+    const child = spawn(
+      pythonPath,
+      [
+        workerScript,
+        "--serve",
+        "--device", options?.device || "cpu",
+        "--cfg-weight", String(options?.cfgWeight ?? 0.5)
+      ],
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, TQDM_DISABLE: "1", PYTHONUNBUFFERED: "1" }
+      }
+    ) as ChildProcessWithoutNullStreams;
 
     const session = new ChatterboxSession(child);
 

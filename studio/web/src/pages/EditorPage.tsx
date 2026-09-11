@@ -16,6 +16,7 @@ export function EditorPage({ projectId, sceneId }: { projectId: string; sceneId?
   const [showJobs, setShowJobs] = useState(false);
   const [playheadSeconds, setPlayheadSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [jobRunning, setJobRunning] = useState(false);
 
   const reload = () => {
     api
@@ -34,6 +35,12 @@ export function EditorPage({ projectId, sceneId }: { projectId: string; sceneId?
       .then((p) => {
         setHasFinal(!!p.artifacts?.audio && p.summary?.stages?.render === "complete");
         setHealth(p.health);
+        // The server refuses a second concurrent job for this project (409) — mirror
+        // that in the UI by disabling the render buttons while one is in flight, so a
+        // double-click can't even try. A real double full-render (two Chatterbox
+        // sessions loading onto the same GPU at once) hit this project during
+        // development; see CLAUDE.md's TTS-contention gotcha.
+        setJobRunning(p.health.state === "RUNNING");
       })
       .catch(() => {});
   };
@@ -57,12 +64,28 @@ export function EditorPage({ projectId, sceneId }: { projectId: string; sceneId?
   };
 
   const startFullRender = () => {
-    api.startRender(projectId, "full").then(() => setShowJobs(true)).catch((e) => setError(e.message));
+    setJobRunning(true);
+    setError(null);
+    api
+      .startRender(projectId, "full")
+      .then(() => setShowJobs(true))
+      .catch((e) => {
+        setError(e.message);
+        setJobRunning(false);
+      });
   };
 
   const startScenePreview = () => {
     if (!sceneId) return;
-    api.startRender(projectId, `scene:${sceneId}`).then(() => setShowJobs(true)).catch((e) => setError(e.message));
+    setJobRunning(true);
+    setError(null);
+    api
+      .startRender(projectId, `scene:${sceneId}`)
+      .then(() => setShowJobs(true))
+      .catch((e) => {
+        setError(e.message);
+        setJobRunning(false);
+      });
   };
 
   return (
@@ -108,7 +131,8 @@ export function EditorPage({ projectId, sceneId }: { projectId: string; sceneId?
               className="btn btn-secondary"
               style={{ fontSize: "var(--text-xs)", height: 26, padding: "0 8px" }}
               onClick={startScenePreview}
-              disabled={!sceneId}
+              disabled={!sceneId || jobRunning}
+              title={jobRunning ? "A job is already running for this project" : undefined}
             >
               Preview Scene
             </button>
@@ -117,8 +141,10 @@ export function EditorPage({ projectId, sceneId }: { projectId: string; sceneId?
               className="btn btn-primary"
               style={{ fontSize: "var(--text-xs)", height: 26, padding: "0 8px" }}
               onClick={startFullRender}
+              disabled={jobRunning}
+              title={jobRunning ? "A job is already running for this project" : undefined}
             >
-              Render Full
+              {jobRunning ? "Rendering…" : "Render Full"}
             </button>
             <button
               type="button"

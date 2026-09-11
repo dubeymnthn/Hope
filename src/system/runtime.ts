@@ -23,6 +23,9 @@ export interface RuntimeReport {
   ttsDevice: TtsDevice;
   /** How the device was chosen: env override, accelerator venv present, or default. */
   ttsDeviceSource: "TTS_DEVICE" | "accelerator-venv" | "default";
+  /** Chatterbox classifier-free-guidance weight. 0.5 is the model's own default. */
+  ttsCfgWeight: number;
+  ttsCfgWeightSource: "TTS_CFG_WEIGHT" | "default";
   pythonExecutable: string | null;
   pythonVersion: string | null;
   pythonEnv: string | null;
@@ -72,6 +75,26 @@ export function resolveTtsDevice(baseDir: string = process.cwd()): {
   // An accelerator venv exists only to be used, so its presence is an explicit opt-in.
   if (existsSync(venvPython(".venv-xpu", baseDir))) return { device: "xpu", source: "accelerator-venv" };
   return { device: "cpu", source: "default" };
+}
+
+/**
+ * Chatterbox's T3 decode duplicates its token batch (and so roughly doubles that stage's
+ * compute) whenever cfg_weight > 0 — see chatterbox/tts.py's generate(). 0.5 is the
+ * library's own default and is left untouched unless explicitly overridden: this is a
+ * real quality/speed trade-off (dropping classifier-free guidance changes the voice's
+ * expressive character), never a silent default change.
+ */
+export function resolveTtsCfgWeight(): { cfgWeight: number; source: RuntimeReport["ttsCfgWeightSource"] } {
+  const requested = (process.env.TTS_CFG_WEIGHT || "").trim();
+  if (!requested) return { cfgWeight: 0.5, source: "default" };
+  const parsed = Number(requested);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new Error(
+      `TTS_CFG_WEIGHT="${requested}" is not valid. Use a number between 0 and 1 (Chatterbox default: 0.5). ` +
+        `0 disables classifier-free guidance in the T3 decode, which roughly halves that stage's compute at the cost of expressiveness.`
+    );
+  }
+  return { cfgWeight: parsed, source: "TTS_CFG_WEIGHT" };
 }
 
 /** Interpreter search order for a device: accelerator venv first for non-CPU devices. */
@@ -138,6 +161,14 @@ export function resolveRuntime(options?: { baseDir?: string; probePython?: boole
     ({ device, source } = resolveTtsDevice(baseDir));
   } catch (err: any) {
     problems.push({ component: "TTS_DEVICE", message: err.message, fix: "Unset TTS_DEVICE or set it to cpu/xpu.", fatal: true });
+  }
+
+  let cfgWeight = 0.5;
+  let cfgWeightSource: RuntimeReport["ttsCfgWeightSource"] = "default";
+  try {
+    ({ cfgWeight, source: cfgWeightSource } = resolveTtsCfgWeight());
+  } catch (err: any) {
+    problems.push({ component: "TTS_CFG_WEIGHT", message: err.message, fix: "Unset TTS_CFG_WEIGHT or set it to a number between 0 and 1.", fatal: true });
   }
 
   const py = resolvePythonForDevice(device, baseDir);
@@ -249,6 +280,8 @@ export function resolveRuntime(options?: { baseDir?: string; probePython?: boole
     node: process.version,
     ttsDevice: device,
     ttsDeviceSource: source,
+    ttsCfgWeight: cfgWeight,
+    ttsCfgWeightSource: cfgWeightSource,
     pythonExecutable: py,
     pythonVersion: pyVersion,
     pythonEnv: pyEnv,
@@ -270,6 +303,12 @@ export function formatRuntimeReport(r: RuntimeReport): string {
     line("platform", `${r.platform} ${r.arch}`),
     line("node", r.node),
     line("tts device", `${r.ttsDevice} (via ${r.ttsDeviceSource})`),
+    line(
+      "tts cfg_weight",
+      r.ttsCfgWeightSource === "default"
+        ? `${r.ttsCfgWeight} (default)`
+        : `${r.ttsCfgWeight} (via TTS_CFG_WEIGHT — CFG guidance ${r.ttsCfgWeight > 0 ? "on" : "off, voice character will differ"})`
+    ),
     line("python", r.pythonExecutable ? `${r.pythonExecutable}${r.pythonVersion ? ` (${r.pythonVersion})` : ""}` : null),
     line("python env", r.pythonEnv),
     line("chatterbox", r.chatterboxVersion),
@@ -297,7 +336,10 @@ export function preflight(options?: { baseDir?: string; requireTts?: boolean }):
   const report = resolveRuntime({ baseDir: options?.baseDir });
   console.log(formatRuntimeReport(report));
   const fatal = report.problems.filter(
-    (p) => p.fatal && (options?.requireTts !== false || !["python", "chatterbox-tts", "torch", "TTS_DEVICE"].includes(p.component))
+    (p) =>
+      p.fatal &&
+      (options?.requireTts !== false ||
+        !["python", "chatterbox-tts", "torch", "TTS_DEVICE", "TTS_CFG_WEIGHT"].includes(p.component))
   );
   if (fatal.length > 0) {
     throw new Error(

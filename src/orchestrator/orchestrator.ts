@@ -7,6 +7,7 @@ import { AudioTimestamps, AudioTimestampsSchema } from "../schemas/timestamps.js
 import { StoryboardResult } from "../schemas/storyboard.js";
 import { ChannelConfig, ChannelConfigSchema, resolvePlanningRate } from "../schemas/channel.js";
 import { DesignDirectorAgent } from "../agents/design-director.js";
+import { DesignStrategistAgent } from "../agents/design-strategist.js";
 import { ResearchAgent } from "../agents/researcher.js";
 import { ResearchPlannerAgent } from "../agents/research-planner.js";
 import { EvidenceGraphAgent } from "../agents/evidence-graph.js";
@@ -26,6 +27,14 @@ import { isAgentTaskPending } from "../agents/agent-task.js";
 import { preflight, RuntimeReport } from "../system/runtime.js";
 import { computeResearchGaps, assessResearchCompleteness, generateResearchGapsMarkdown, CompletenessAssessment } from "../research/gap-detection.js";
 import { ResearchCompleteness } from "../schemas/research-gaps.js";
+import {
+  ProductionGateError,
+  isProductionGate,
+  assertResearchApproved,
+  assertScriptApproved,
+  computeResearchStateHash,
+  computeScriptStateHash
+} from "./production-gate.js";
 
 /** A stage-boundary notification (V2.4: additive hook for a live jobs panel). Fired
  * alongside the existing console.log calls in `timed()`/`printStageReport()` — CLI
@@ -45,6 +54,19 @@ export interface OrchestratorOptions {
   planOnly?: boolean;
   /** Skip the runtime preflight (tests that stub the environment). */
   skipPreflight?: boolean;
+  /**
+   * V2.6: auto-approve research/script the instant their deterministic gates pass,
+   * bypassing the human-review pause (`ProductionGateError`). Defaults false — the gate is
+   * on unless bypassed. `src/cli.ts` passes `true` by default to preserve the CLI's
+   * existing autonomous behavior; Documentary Studio always passes `false`.
+   */
+  autoApprove?: boolean;
+  /**
+   * V2.6: once PRODUCTION_READY is reached, continue into TTS/visuals/render. Defaults
+   * false — reaching PRODUCTION_READY pauses (a `ProductionGateError`) until this is set,
+   * which is what the Studio "Start Production" button/`--require-review`-free CLI runs do.
+   */
+  startProduction?: boolean;
   /** Optional live progress hook (V2.4 studio jobs panel); never required by the CLI. */
   onEvent?: (event: StageEvent) => void;
 }
@@ -74,6 +96,7 @@ export class OrchestratorAgent {
   private researchPlannerAgent = new ResearchPlannerAgent();
   private evidenceGraphAgent = new EvidenceGraphAgent();
   private visualEvidenceMapperAgent = new VisualEvidenceMapperAgent();
+  private designStrategistAgent = new DesignStrategistAgent();
   private argumentAgent = new ArgumentAgent();
   private scriptAgent = new ScriptAgent();
   private scriptQaAgent = new ScriptQAAgent();
@@ -201,6 +224,15 @@ export class OrchestratorAgent {
         }
       }
 
+      // ---- Stage 1d: Research approval gate (V2.6) — a human checkpoint, not an agent one ----
+      if (options.autoApprove) {
+        this.stateManager.approve("research", { approvedArtifactHash: computeResearchStateHash(projectDir) });
+      } else {
+        assertResearchApproved(this.stateManager, projectDir);
+      }
+      this.stateManager.setProductionPhase("RESEARCH_APPROVED");
+      this.stateManager.setProductionPhase("ARGUMENT_GENERATING");
+
       // ---- Stage 2: Argument (Antigravity, now evidence-graph-aware) ----
       const argumentResult = await this.timed("argument", async () => {
         const a = await this.argumentAgent.ensure(topic, projectDir, {
@@ -215,7 +247,8 @@ export class OrchestratorAgent {
         this.checkpoint("argument", "argument/argument.json", a.artifactHash, {
           topic,
           resolvedDurationMinutes: a.resolvedDurationMinutes,
-          supportingClaims: a.argument.supportingClaims.length
+          supportingClaims: a.argument.supportingClaims.length,
+          researchRevisionAtGeneration: this.stateManager.getRevisionCounters().research
         });
         return { value: a, status: "complete" as const, detail: `${a.argument.narrativeProgression.length} phases, ${a.resolvedDurationMinutes} min` };
       });
@@ -231,7 +264,8 @@ export class OrchestratorAgent {
           estimatedMinutes: s.estimatedMinutes,
           planningWordsPerMinute: planningRate.wordsPerMinute,
           planningRateSource: planningRate.source,
-          scriptGeneratorVersion: channelConfig?.versions?.scriptGenerator
+          scriptGeneratorVersion: channelConfig?.versions?.scriptGenerator,
+          researchRevisionAtGeneration: this.stateManager.getRevisionCounters().research
         });
         return { value: s, status: "complete" as const, detail: `${s.script.scenes.length} scenes, ${s.totalWords} words, ~${s.estimatedMinutes} min @ ${planningRate.wordsPerMinute} wpm (${planningRate.source})` };
       });
@@ -251,6 +285,14 @@ export class OrchestratorAgent {
         return { value: r, status: "complete" as const, detail: r.status };
       });
 
+      // ---- Stage 4a: Script approval gate (V2.6) — human checkpoint #2 ----
+      if (options.autoApprove) {
+        this.stateManager.approve("script", { approvedArtifactHash: computeScriptStateHash(projectDir) });
+      } else {
+        assertScriptApproved(this.stateManager, projectDir);
+      }
+      this.stateManager.setProductionPhase("SCRIPT_APPROVED");
+
       // ---- Stage 4b: Visual Evidence Map (Antigravity) — V2.3, claim -> visual reasoning ----
       const visualEvidenceMapResult = await this.timed("visual-evidence-map", async () => {
         const v = await this.visualEvidenceMapperAgent.ensure(topic, projectDir, { script, evidenceGraph, repoRoot });
@@ -261,11 +303,22 @@ export class OrchestratorAgent {
       });
       const visualEvidenceMap = visualEvidenceMapResult.map;
 
+      // ---- Stage 4c: Production-ready gate (V2.6) — everything approved, awaiting "Start Production" ----
+      this.stateManager.setProductionPhase("PRODUCTION_READY");
+
       if (options.planOnly) {
         console.log("\n[ORCHESTRATOR] --plan-only set: stopping before TTS as requested.");
         this.printStageReport(runStart, { planningRate, channelConfig });
         throw new Error("PLAN_ONLY_COMPLETE");
       }
+
+      if (!options.startProduction) {
+        throw new ProductionGateError(
+          "PRODUCTION_READY",
+          "Research and script are approved and every production input is valid. Start production (or pass --require-review off / autoApprove+startProduction) to begin TTS, visuals, and rendering."
+        );
+      }
+      this.stateManager.setProductionPhase("TTS_GENERATING");
 
       // ---- Stage 5: TTS narration (local Chatterbox, scene-level resume) ----
       const audio = await this.timed("tts", async () => {
@@ -308,6 +361,18 @@ export class OrchestratorAgent {
         throw new Error(`[ORCHESTRATOR] DURATION GATE: ${durationAssessment.message}`);
       }
 
+      this.stateManager.setProductionPhase("VISUAL_GENERATING");
+
+      // ---- Stage 5c: Design Strategist (Antigravity, optional) — V2.6, design.md only ----
+      const designStrategyResult = await this.timed("design-strategist", async () => {
+        const d = await this.designStrategistAgent.ensure(topic, projectDir, { repoRoot });
+        if (d) {
+          this.checkpoint("design_strategist", "design/design-strategy.json", d.artifactHash, {});
+        }
+        return { value: d, status: "complete" as const, detail: d ? "design.md interpreted" : "no design.md; skipped" };
+      });
+      const designStrategy = designStrategyResult?.strategy ?? null;
+
       // ---- Stage 6: Visual direction (Antigravity, now visual-evidence-map/evidence-graph-aware) ----
       const planResult = await this.timed("visual-director", async () => {
         const p = await this.visualDirector.ensure({
@@ -319,7 +384,8 @@ export class OrchestratorAgent {
           config: channelConfig,
           repoRoot,
           visualEvidenceMap,
-          evidenceGraph
+          evidenceGraph,
+          designStrategy
         });
         this.checkpoint("visual_direction", "storyboard/visual-plan.json", p.artifactHash, {
           scenes: p.plan.scenes.length,
@@ -375,6 +441,8 @@ export class OrchestratorAgent {
           detail: `${r.status}; ${v.visualModeCount} modes, ${v.layoutSignatureCount} layouts, longest static ${v.longestStaticInterval}s, first30 ${v.first30.visualChangeCount} changes`
         };
       });
+
+      this.stateManager.setProductionPhase("RENDERING");
 
       // ---- Stage 10: HyperFrames check + render ----
       const rawVideoPath = join(projectDir, "renders/final-hyperframes.mp4");
@@ -434,6 +502,8 @@ export class OrchestratorAgent {
         return { value: null, status: "complete" as const, detail: "h264 + aac muxed" };
       });
 
+      this.stateManager.setProductionPhase("QA");
+
       // ---- Stage 12: Media QA ----
       const qaReport = await this.timed("media-qa", async () => {
         const r = await this.qaAgent.evaluate({
@@ -454,9 +524,9 @@ export class OrchestratorAgent {
       console.log(`[ORCHESTRATOR] Deliverable: ${finalVideoPath}`);
       return { finalVideoPath, qaReport, scriptQAReport, visualQAReport, durationAssessment, stages: this.stages, runtime };
     } catch (err) {
-      // An agent-task halt is not a failure; still print what completed so the operator
-      // sees where the pipeline is waiting.
-      if (isAgentTaskPending(err) && this.stages.length > 0) {
+      // An agent-task halt or a production-gate pause is not a failure; still print what
+      // completed so the operator sees where the pipeline is waiting.
+      if ((isAgentTaskPending(err) || isProductionGate(err)) && this.stages.length > 0) {
         this.printStageReport(runStart, { planningRate, channelConfig });
       }
       throw err;

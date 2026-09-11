@@ -40,6 +40,7 @@ export interface ProjectSummary {
   lastModified: string;
   health: HealthInfo;
   stages: Record<string, string>;
+  productionPhase: string;
   qaStatus: string | null;
 }
 
@@ -82,13 +83,44 @@ export interface SceneDetail extends SceneSummary {
 export interface RenderJob {
   jobId: string;
   projectId: string;
-  scope: "full" | "tts" | { scene: string };
-  status: "queued" | "running" | "complete" | "failed";
+  scope: "full" | "produce" | "tts" | { scene: string };
+  status: "queued" | "running" | "complete" | "failed" | "blocked" | "awaiting_agent";
   startedAt: string;
   completedAt?: string;
   stages: { stage: string; status: string; durationMs: number; detail?: string }[];
   error?: string;
   outputPath?: string;
+}
+
+export interface ApprovalRecord {
+  approvedAt: string;
+  approvedArtifactHash: string;
+  atRevision: number;
+}
+
+export interface ProductionSummary {
+  phase: string;
+  approvals: { research: ApprovalRecord | null; script: ApprovalRecord | null };
+  revisionCounters: { research: number; argument: number; script: number; design: number };
+  researchApprovalValid: boolean;
+  scriptApprovalValid: boolean;
+  stages: { key: string; label: string; status: string }[];
+}
+
+export interface StalenessReport {
+  generatedAt: string;
+  staleReasons: string[];
+  affectedClaims: string[];
+  affectedArgumentSections: string[];
+  affectedScriptScenes: string[];
+  affectedVisualOpportunities: string[];
+  summary: string;
+}
+
+export interface DesignInfo {
+  designMd: string | null;
+  strategy: any | null;
+  stale: boolean;
 }
 
 export interface SearchResult {
@@ -101,8 +133,8 @@ export interface SearchResult {
 
 export const api = {
   listProjects: () => request<{ projects: ProjectSummary[] }>("/projects"),
-  createProject: (topic: string, generate: boolean) =>
-    request<{ id: string; jobId?: string }>("/projects", { method: "POST", body: JSON.stringify({ topic, generate }) }),
+  createProject: (topic: string, generate: boolean, designMd?: string) =>
+    request<{ id: string; jobId?: string }>("/projects", { method: "POST", body: JSON.stringify({ topic, generate, designMd }) }),
   getProject: (id: string) => request<ProjectDetail>(`/projects/${id}`),
   getHealth: (id: string) => request<HealthInfo>(`/projects/${id}/health`),
 
@@ -134,6 +166,44 @@ export const api = {
   listRevisions: (id: string) => request<{ entries: any[]; cursor: number }>(`/projects/${id}/revisions`),
   undo: (id: string) => request<any>(`/projects/${id}/revisions/undo`, { method: "POST" }),
   redo: (id: string) => request<any>(`/projects/${id}/revisions/redo`, { method: "POST" }),
+
+  // --- V2.6: research review workbench ---
+  getResearch: (id: string) => request<{ plan: any; questions: any; evidenceGraph: any; gaps: any; research: any }>(`/projects/${id}/research`),
+  getResearchStaleness: (id: string) => request<StalenessReport>(`/projects/${id}/research/staleness`),
+  patchQuestion: (id: string, questionId: string, patch: Record<string, unknown>) =>
+    request<any>(`/projects/${id}/research/questions/${questionId}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  addQuestion: (id: string, input: Record<string, unknown>) =>
+    request<any>(`/projects/${id}/research/questions`, { method: "POST", body: JSON.stringify(input) }),
+  patchEvidence: (id: string, evidenceId: string, patch: Record<string, unknown>) =>
+    request<any>(`/projects/${id}/research/evidence/${evidenceId}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  addEvidence: (id: string, input: Record<string, unknown>) =>
+    request<any>(`/projects/${id}/research/evidence`, { method: "POST", body: JSON.stringify(input) }),
+  getEvidenceRemovalImpact: (id: string, evidenceId: string) =>
+    request<StalenessReport>(`/projects/${id}/research/evidence/${evidenceId}/removal-impact`),
+  deleteEvidence: (id: string, evidenceId: string) => request<any>(`/projects/${id}/research/evidence/${evidenceId}`, { method: "DELETE" }),
+  requestMoreResearch: (id: string, input: { instruction: string; targetQuestionId?: string; targetClaimId?: string }) =>
+    request<{ stage: string; briefPath: string }>(`/projects/${id}/research/request-more`, { method: "POST", body: JSON.stringify(input) }),
+  approveResearch: (id: string) => request<{ approved: true; warnings: string[] }>(`/projects/${id}/research/approve`, { method: "POST" }),
+
+  // --- V2.6: script review workbench ---
+  getScriptReview: (id: string) => request<{ script: any; argument: any; evidenceGraph: any }>(`/projects/${id}/script-review`),
+  deleteScene: (id: string, sceneId: string) => request<any>(`/projects/${id}/script-review/scenes/${sceneId}`, { method: "DELETE" }),
+  moveScene: (id: string, sceneId: string, toIndex: number) =>
+    request<any>(`/projects/${id}/script-review/scenes/${sceneId}/move`, { method: "POST", body: JSON.stringify({ toIndex }) }),
+  overrideClaim: (id: string, sceneId: string, claimId: string, justification: string) =>
+    request<any>(`/projects/${id}/script-review/scenes/${sceneId}/claims/${claimId}/override`, { method: "POST", body: JSON.stringify({ justification }) }),
+  approveScript: (id: string) => request<{ approved: true; warnings: string[] }>(`/projects/${id}/script-review/approve`, { method: "POST" }),
+  requestScriptRevision: (id: string, input: { instruction: string; sceneId?: string }) =>
+    request<{ stage: string; briefPath: string }>(`/projects/${id}/script-review/request-revision`, { method: "POST", body: JSON.stringify(input) }),
+
+  // --- V2.6: production dashboard ---
+  getProduction: (id: string) => request<ProductionSummary>(`/projects/${id}/production`),
+  startProduction: (id: string) => request<RenderJob>(`/projects/${id}/production/start`, { method: "POST" }),
+
+  // --- V2.6: design.md ---
+  getDesign: (id: string) => request<DesignInfo>(`/projects/${id}/design`),
+  saveDesign: (id: string, designMd: string) => request<DesignInfo>(`/projects/${id}/design`, { method: "PUT", body: JSON.stringify({ designMd }) }),
+  generateDesignStrategy: (id: string) => request<any>(`/projects/${id}/design/generate`, { method: "POST" }),
 
   getSettings: () => request<any>("/settings")
 };

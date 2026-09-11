@@ -21,7 +21,12 @@ export const VisualTypeEnum = z.enum([
   "abstract_metaphor",
   "architecture_diagram",
   "ambient_establishing",
-  "evidence_document"
+  "evidence_document",
+  // --- V2.3: visual-evidence-map modes (spec §20) ---
+  "entity_network",
+  "before_after",
+  "geographic_flow",
+  "quantitative_transformation"
 ]);
 export type VisualType = z.infer<typeof VisualTypeEnum>;
 

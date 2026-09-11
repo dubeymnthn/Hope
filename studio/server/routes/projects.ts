@@ -3,6 +3,7 @@ import { listProjectIds, resolveProjectDir, createProjectWorkspace, lastModified
 import { readProjectArtifacts, readQaReports, readPipelineState } from "../services/artifact-reader.js";
 import { computeProjectHealth } from "../services/project-health.js";
 import { startJob, listJobsForProject } from "../services/render-jobs.js";
+import { saveDesignMd } from "../services/design-service.js";
 import { projectGuard, ProjectRequest } from "../middleware/project-guard.js";
 import { sendError } from "../services/http-errors.js";
 
@@ -33,6 +34,7 @@ function summarize(id: string) {
       render: pipelineState?.milestones?.render?.status ?? "pending",
       qa: pipelineState?.milestones?.qa?.status ?? "pending"
     },
+    productionPhase: pipelineState?.productionPhase ?? "RESEARCHING",
     qaStatus: qa.media?.status ?? null
   };
 }
@@ -48,12 +50,16 @@ projectsRouter.get("/", (_req, res) => {
 
 projectsRouter.post("/", (req, res) => {
   try {
-    const { topic, generate } = req.body ?? {};
+    const { topic, generate, designMd } = req.body ?? {};
     if (typeof topic !== "string" || topic.trim().length === 0) {
       res.status(400).json({ error: "A non-empty 'topic' is required." });
       return;
     }
     const { id, dir } = createProjectWorkspace(topic.trim());
+
+    if (typeof designMd === "string" && designMd.trim().length > 0) {
+      saveDesignMd(dir, designMd);
+    }
 
     let jobId: string | undefined;
     if (generate === true) {

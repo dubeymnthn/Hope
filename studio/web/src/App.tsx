@@ -6,6 +6,7 @@ import { OverviewPage } from "./pages/OverviewPage.js";
 import { EditorPage } from "./pages/EditorPage.js";
 import { ResearchPage } from "./pages/ResearchPage.js";
 import { ScriptPage } from "./pages/ScriptPage.js";
+import { DesignPage } from "./pages/DesignPage.js";
 import { StoryboardPage } from "./pages/StoryboardPage.js";
 import { AudioPage } from "./pages/AudioPage.js";
 import { SourcesPage } from "./pages/SourcesPage.js";
@@ -18,6 +19,7 @@ import {
   EditorIcon,
   ResearchIcon,
   ScriptIcon,
+  DesignIcon,
   StoryboardIcon,
   AudioIcon,
   SourcesIcon,
@@ -41,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: "editor", label: "Editor", needsProject: true, icon: (p) => <EditorIcon {...p} /> },
   { key: "research", label: "Research", needsProject: true, icon: (p) => <ResearchIcon {...p} /> },
   { key: "script", label: "Script", needsProject: true, icon: (p) => <ScriptIcon {...p} /> },
+  { key: "design", label: "Design", needsProject: true, icon: (p) => <DesignIcon {...p} /> },
   { key: "storyboard", label: "Storyboard", needsProject: true, icon: (p) => <StoryboardIcon {...p} /> },
   { key: "audio", label: "Audio", needsProject: true, icon: (p) => <AudioIcon {...p} /> },
   { key: "sources", label: "Sources", needsProject: true, icon: (p) => <SourcesIcon {...p} /> },
@@ -240,6 +243,8 @@ function Page({ route }: { route: ReturnType<typeof useRoute> }) {
       return <ResearchPage projectId={route.projectId!} />;
     case "script":
       return <ScriptPage projectId={route.projectId!} />;
+    case "design":
+      return <DesignPage projectId={route.projectId!} />;
     case "storyboard":
       return <StoryboardPage projectId={route.projectId!} />;
     case "audio":

@@ -56,10 +56,10 @@ def get_model(device="cpu"):
         print(f"[ChatterboxWorker] Model loaded in {time.time()-t0:.2f}s", file=sys.stderr)
     return _model
 
-def synthesize_text(text: str, output_path: str, device: str = "cpu"):
+def synthesize_text(text: str, output_path: str, device: str = "cpu", cfg_weight: float = 0.5):
     model = get_model(device)
     t0 = time.time()
-    wav = model.generate(text)
+    wav = model.generate(text, cfg_weight=cfg_weight)
     duration = time.time() - t0
     
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
@@ -76,7 +76,7 @@ def synthesize_text(text: str, output_path: str, device: str = "cpu"):
     }
     return result
 
-def serve(device: str = "cpu"):
+def serve(device: str = "cpu", cfg_weight: float = 0.5):
     """
     Persistent session mode for long-form narration.
 
@@ -107,7 +107,7 @@ def serve(device: str = "cpu"):
             break
 
         try:
-            res = synthesize_text(req["text"], req["output"], device)
+            res = synthesize_text(req["text"], req["output"], device, req.get("cfg_weight", cfg_weight))
             res["ok"] = True
             print(json.dumps(res), flush=True)
         except Exception as exc:
@@ -121,24 +121,25 @@ def main():
     parser.add_argument("--batch-json", type=str, help="Path to JSON file containing array of {id, text, output}")
     parser.add_argument("--serve", action="store_true", help="Run a persistent stdin/stdout synthesis session")
     parser.add_argument("--device", type=str, default="cpu", help="Compute device (cpu)")
+    parser.add_argument("--cfg-weight", type=float, default=0.5, help="Classifier-free-guidance weight (Chatterbox default: 0.5)")
     args = parser.parse_args()
 
     if args.serve:
-        serve(args.device)
+        serve(args.device, args.cfg_weight)
         return
 
     if args.batch_json:
         with open(args.batch_json, "r", encoding="utf-8") as f:
             items = json.load(f)
-        
+
         results = []
         for idx, item in enumerate(items):
             print(f"[ChatterboxWorker] Synthesizing Scene {idx+1}/{len(items)} ({item.get('id', '')})...", file=sys.stderr)
-            res = synthesize_text(item["text"], item["output"], args.device)
+            res = synthesize_text(item["text"], item["output"], args.device, args.cfg_weight)
             res["id"] = item.get("id", "")
             print(f"[ChatterboxWorker] Completed Scene {idx+1}/{len(items)} in {res['computeTime']}s (Audio duration: {res['duration']}s)", file=sys.stderr)
             results.append(res)
-        
+
         print(json.dumps(results))
         return
 
@@ -146,7 +147,7 @@ def main():
         print("Error: either --batch-json or both --text and --output are required", file=sys.stderr)
         sys.exit(1)
 
-    result = synthesize_text(args.text, args.output, args.device)
+    result = synthesize_text(args.text, args.output, args.device, args.cfg_weight)
     print(json.dumps(result))
 
 if __name__ == "__main__":

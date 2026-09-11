@@ -20,7 +20,10 @@ export interface StudioEvent {
     | "qa_completed"
     | "job_started"
     | "job_completed"
-    | "job_failed";
+    | "job_failed"
+    // --- V2.6: a job pausing for human review or an agent task is not a failure ---
+    | "job_blocked"
+    | "job_awaiting_agent";
   jobId: string;
   projectId: string;
   detail?: string;

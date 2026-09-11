@@ -67,6 +67,17 @@ export function ScriptIcon(props: IconProps) {
   );
 }
 
+export function DesignIcon(props: IconProps) {
+  return (
+    <SvgBase {...props}>
+      <path d="M12 3 C7 3 3 7 3 12 C3 16.5 6.5 20 11 21 C11.8 21.2 12.4 20.5 12.1 19.8 C11.9 19.3 12.1 18.7 12.6 18.5 C13 18.3 13.5 18.5 13.7 18.9 C13.9 19.4 14.5 19.6 14.9 19.3 C18.4 17.3 21 14.9 21 12 C21 7 17 3 12 3 Z" />
+      <circle cx="7.5" cy="10.5" r="1.2" />
+      <circle cx="12" cy="7.5" r="1.2" />
+      <circle cx="16.5" cy="10.5" r="1.2" />
+    </SvgBase>
+  );
+}
+
 export function StoryboardIcon(props: IconProps) {
   return (
     <SvgBase {...props}>

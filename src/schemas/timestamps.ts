@@ -25,6 +25,7 @@ export const NarrationMeasurementSchema = z.object({
   planningWordsPerMinute: z.number().positive().describe("Rate the script was planned against"),
   planningRateSource: z.enum(["calibration", "legacy-estimate"]),
   device: z.string(),
+  cfgWeight: z.number().optional().describe("Chatterbox classifier-free-guidance weight this run used; absent on pre-existing runs (all generated at the 0.5 default)"),
   scenesSynthesized: z.number().int().nonnegative(),
   scenesReused: z.number().int().nonnegative(),
   synthesisSeconds: z.number().nonnegative().describe("Wall-clock spent synthesising this run (reused scenes excluded)"),

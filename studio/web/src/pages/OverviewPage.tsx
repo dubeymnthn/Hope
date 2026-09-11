@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ProjectDetail, SceneSummary } from "../api/client.js";
+import { api, ProjectDetail, SceneSummary, ProductionSummary } from "../api/client.js";
 import { navigate } from "../router.js";
 import { CheckIcon } from "../components/Icons.js";
 
@@ -13,23 +13,25 @@ function formatDuration(seconds: number | null): string {
 export function OverviewPage({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
+  const [production, setProduction] = useState<ProductionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
-  useEffect(() => {
-    api
-      .getProject(projectId)
-      .then((p) => {
-        setProject(p);
-      })
-      .catch((e) => setError(e.message));
+  const reload = () => {
+    api.getProject(projectId).then(setProject).catch((e) => setError(e.message));
+    api.listScenes(projectId).then((r) => setScenes(r.scenes)).catch(() => {});
+    api.getProduction(projectId).then(setProduction).catch(() => {});
+  };
+  useEffect(reload, [projectId]);
 
+  const handleStartProduction = () => {
+    setStarting(true);
     api
-      .listScenes(projectId)
-      .then((r) => {
-        setScenes(r.scenes);
-      })
-      .catch(() => {});
-  }, [projectId]);
+      .startProduction(projectId)
+      .then(reload)
+      .catch((e) => setError(e.message))
+      .finally(() => setStarting(false));
+  };
 
   if (error) {
     return (
@@ -48,7 +50,6 @@ export function OverviewPage({ projectId }: { projectId: string }) {
   }
 
   const p = project.summary;
-  const stages = p.stages || {};
   const artifacts = project.artifacts || {};
 
   // Compute metrics
@@ -62,14 +63,21 @@ export function OverviewPage({ projectId }: { projectId: string }) {
   const TOTAL_MODES = 5;
   const visualDiversityPercent = Math.min(100, Math.round((modeCount / TOTAL_MODES) * 100));
 
-  const statusItems = [
-    { label: "Research", complete: stages.research === "complete" || !!artifacts.research },
-    { label: "Argument", complete: stages.argument === "complete" || !!artifacts.argument },
-    { label: "Script", complete: stages.script === "complete" || !!artifacts.script },
-    { label: "Audio", complete: stages.audio === "complete" || !!artifacts.audio },
-    { label: "Visuals", complete: stages.render === "complete" || !!artifacts.visualEvidence },
-    { label: "QA", complete: p.qaStatus === "pass" || p.qaStatus === "PASS" || true }
-  ];
+  // V2.6: the spec §27 8-stage dashboard, sourced from the real production-state summary
+  // (falls back to a coarse artifact-existence guess only while it's still loading).
+  const dashboardStages =
+    production?.stages ?? [
+      { key: "research", label: "Research", status: artifacts.research ? "APPROVED" : "RESEARCHING" },
+      { key: "argument", label: "Argument", status: artifacts.argument ? "GENERATED" : "PENDING" },
+      { key: "script", label: "Script", status: artifacts.script ? "READY_FOR_REVIEW" : "PENDING" },
+      { key: "production", label: "Production", status: "LOCKED" },
+      { key: "audio", label: "Audio", status: artifacts.audio ? "GENERATED" : "PENDING" },
+      { key: "visuals", label: "Visuals", status: artifacts.visualPlan ? "GENERATED" : "PENDING" },
+      { key: "qa", label: "QA", status: p.qaStatus ?? "PENDING" },
+      { key: "export", label: "Export", status: "PENDING" }
+    ];
+  const readableStatus = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const isGood = (s: string) => ["APPROVED", "GENERATED", "READY", "COMPLETE", "PASS", "PASSED"].includes(s);
 
   return (
     <div className="overview-content" style={{ maxWidth: 760, margin: "0 auto", padding: "var(--space-6) var(--space-5) var(--space-8)", display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
@@ -102,26 +110,28 @@ export function OverviewPage({ projectId }: { projectId: string }) {
       <section className="panel">
         <div className="panel-header">Production Status</div>
         <div className="panel-body">
-          {statusItems.map((item) => (
-            <div className="inspector-row" key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-              <span className="inspector-row-label" style={{ color: "var(--text-secondary)", fontSize: "var(--text-sm)" }}>{item.label}</span>
+          {dashboardStages.map((item, i) => (
+            <div className="inspector-row" key={item.key ?? item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+              <span className="inspector-row-label" style={{ color: "var(--text-secondary)", fontSize: "var(--text-sm)" }}>
+                {String(i + 1).padStart(2, "0")} {item.label}
+              </span>
               <span
                 className="inspector-row-value"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  color: item.complete ? "var(--success)" : "var(--warning)",
-                  fontSize: "var(--text-sm)",
-                  fontWeight: 500
-                }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, color: isGood(item.status) ? "var(--success)" : "var(--warning)", fontSize: "var(--text-sm)", fontWeight: 500 }}
               >
-                <CheckIcon size={16} />
-                {item.complete ? "Complete" : "Pending"}
+                {isGood(item.status) && <CheckIcon size={16} />}
+                {readableStatus(item.status)}
               </span>
             </div>
           ))}
         </div>
+        {production?.phase === "PRODUCTION_READY" && (
+          <div style={{ padding: "var(--space-3)", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+            <button type="button" className="btn btn-primary" onClick={handleStartProduction} disabled={starting}>
+              {starting ? "Starting…" : "Start Production"}
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="panel">

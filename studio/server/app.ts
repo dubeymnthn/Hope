@@ -11,6 +11,10 @@ import { mediaRouter } from "./routes/media.js";
 import { exportRouter } from "./routes/export.js";
 import { revisionsRouter } from "./routes/revisions.js";
 import { settingsRouter } from "./routes/settings.js";
+import { researchRouter } from "./routes/research.js";
+import { scriptReviewRouter } from "./routes/script-review.js";
+import { productionRouter } from "./routes/production.js";
+import { designRouter } from "./routes/design.js";
 import { repoRoot } from "./services/workspace.js";
 
 /**
@@ -31,6 +35,10 @@ export function createApp(): Express {
   app.use("/api/projects/:projectId/export", exportRouter);
   app.use("/api/projects/:projectId/media", mediaRouter);
   app.use("/api/projects/:projectId/revisions", revisionsRouter);
+  app.use("/api/projects/:projectId/research", researchRouter);
+  app.use("/api/projects/:projectId/script-review", scriptReviewRouter);
+  app.use("/api/projects/:projectId/production", productionRouter);
+  app.use("/api/projects/:projectId/design", designRouter);
   app.use("/api/projects", projectsRouter);
   app.use("/api/jobs", jobsRouter);
   app.use("/api/settings", settingsRouter);

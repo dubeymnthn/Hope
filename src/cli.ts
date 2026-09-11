@@ -3,12 +3,16 @@ import { mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { OrchestratorAgent } from "./orchestrator/orchestrator.js";
 import { isAgentTaskPending } from "./agents/agent-task.js";
+import { isProductionGate } from "./orchestrator/production-gate.js";
 
 interface CliOptions {
   topic: string;
   outputDir?: string;
   workspace: boolean;
   planOnly: boolean;
+  /** V2.6: opt into the human-review gate (Documentary Studio's default). CLI stays
+   *  autonomous by default so existing muscle memory/scripts keep working unchanged. */
+  requireReview: boolean;
 }
 
 function slugify(topic: string): string {
@@ -26,6 +30,7 @@ function parseArgs(args: string[]): CliOptions {
   let outputDir: string | undefined;
   let workspace = false;
   let planOnly = false;
+  let requireReview = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -37,12 +42,14 @@ function parseArgs(args: string[]): CliOptions {
       workspace = true;
     } else if (arg === "--plan-only") {
       planOnly = true;
+    } else if (arg === "--require-review") {
+      requireReview = true;
     } else if (!arg.startsWith("-") && !topic) {
       topic = arg;
     }
   }
 
-  return { topic, outputDir, workspace, planOnly };
+  return { topic, outputDir, workspace, planOnly, requireReview };
 }
 
 function usage(): void {
@@ -58,6 +65,9 @@ Options:
   -o, --output-dir <dir>    Explicit workspace directory
   -w, --workspace           Use a per-topic workspace at topics/<slug>/
       --plan-only           Stop after the script QA gate, before TTS
+      --require-review      Pause for human research/script approval instead of running
+                             straight through (V2.6; Documentary Studio always requires
+                             this — the CLI stays autonomous unless you pass this flag)
 
 Examples:
   npm run produce -- "<your documentary topic>"
@@ -72,7 +82,7 @@ pipeline is re-run, resuming from that point.
 }
 
 async function main() {
-  const { topic, outputDir, workspace, planOnly } = parseArgs(process.argv.slice(2));
+  const { topic, outputDir, workspace, planOnly, requireReview } = parseArgs(process.argv.slice(2));
 
   if (!topic) {
     usage();
@@ -96,7 +106,16 @@ async function main() {
   });
 
   try {
-    const result = await orchestrator.run({ topic, outputDir: projectDir, repoRoot, planOnly });
+    const result = await orchestrator.run({
+      topic,
+      outputDir: projectDir,
+      repoRoot,
+      planOnly,
+      // V2.6: the CLI stays fully autonomous unless --require-review opts into the same
+      // human-approval gate Documentary Studio always enforces.
+      autoApprove: !requireReview,
+      startProduction: !requireReview
+    });
 
     if (result.qaReport.status === "PASS") {
       console.log(`\nSUCCESS: video produced and verified at ${result.finalVideoPath}`);
@@ -107,6 +126,11 @@ async function main() {
   } catch (err: any) {
     if (isAgentTaskPending(err)) {
       // Not a failure: a reasoning stage is waiting on the Antigravity agent.
+      console.log(`\n${err.message}`);
+      process.exit(2);
+    }
+    if (isProductionGate(err)) {
+      // Not a failure: waiting on a human approval (--require-review was set).
       console.log(`\n${err.message}`);
       process.exit(2);
     }

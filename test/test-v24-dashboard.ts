@@ -302,6 +302,20 @@ async function main(): Promise<void> {
       // Restore the original, evidence-backed narration for the rest of the suite.
       await patch(`/projects/${FIXTURE_ID}/scenes/scene-001/narration`, { narration: "The fixture value is 42, according to the filing." });
 
+      // V2.6: TTS must not begin before research AND script are approved (spec §20) — this
+      // fixture hasn't approved either yet. `startJob` itself always returns 202 (the gate
+      // check runs inside the async job), so "blocked" shows up as the job's own status.
+      const blockedRegen = await post(`/projects/${FIXTURE_ID}/scenes/scene-001/narration/regenerate`);
+      const blockedRegenJob = await blockedRegen.json();
+      await new Promise((r) => setTimeout(r, 300));
+      const blockedRegenPolled = await get(`/jobs/${blockedRegenJob.jobId}`).then((r) => r.json());
+      check("TTS is blocked before research/script approval (V2.6)", blockedRegenPolled.status === "blocked", blockedRegenPolled.status);
+
+      const approveResearch = await post(`/projects/${FIXTURE_ID}/research/approve`, {});
+      check("Research approves cleanly against the complete fixture graph", approveResearch.status === 200, String(approveResearch.status));
+      const approveScript = await post(`/projects/${FIXTURE_ID}/script-review/approve`, {});
+      check("Script approves cleanly once research is approved", approveScript.status === 200, String(approveScript.status));
+
       const ttsAvailable = existsSync(join(repoRoot, ".venv")) || existsSync(join(repoRoot, ".venv-xpu"));
       if (ttsAvailable) {
         const regen = await post(`/projects/${FIXTURE_ID}/scenes/scene-001/narration/regenerate`);
@@ -315,6 +329,17 @@ async function main(): Promise<void> {
         await new Promise((r) => setTimeout(r, 3000));
         const polled = await get(`/jobs/${regenJob.jobId}`).then((r) => r.json());
         check("The real TTS job is genuinely dispatched, not stuck uninitialized", polled.status === "running" || polled.status === "complete" || polled.status === "failed", polled.status);
+
+        // Sections 16+ (audio state, render lifecycle) start their own jobs against this
+        // same project — `hasActiveJob` correctly refuses a second concurrent job per
+        // project (the GPU-contention guard render-jobs.ts documents), so on a machine
+        // where TTS is genuinely available this dispatch must actually finish before
+        // continuing, not just be confirmed as "dispatched." Bounded; a real cold model
+        // load can take well over a minute (CLAUDE.md).
+        for (let i = 0; i < 180 && (polled.status === "queued" || polled.status === "running"); i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          Object.assign(polled, await get(`/jobs/${regenJob.jobId}`).then((r) => r.json()));
+        }
       } else {
         console.log("  [SKIP] No .venv/.venv-xpu present; skipping real TTS regeneration request.");
       }
@@ -324,11 +349,20 @@ async function main(): Promise<void> {
     section("16. Audio track state");
     // ------------------------------------------------------------------
     {
+      // Section 14-15's real "tts" job (when TTS is available) regenerates the WHOLE
+      // script (render-jobs.ts's "tts" scope isn't scene-scoped), so once it's genuinely
+      // run to completion scene-002 is legitimately cached too — that's real state, not a
+      // stale assumption from before the wait-for-completion fix above.
+      const ttsRanToCompletion = existsSync(join(repoRoot, ".venv")) || existsSync(join(repoRoot, ".venv-xpu"));
       const audioState = await get(`/projects/${FIXTURE_ID}/audio`).then((r) => r.json());
       const s1 = audioState.scenes.find((s: any) => s.sceneId === "scene-001");
       const s2 = audioState.scenes.find((s: any) => s.sceneId === "scene-002");
       check("Audio state reflects a real cached scene from tts-cache.json", s1?.cached === true);
-      check("Audio state reflects a real not-yet-generated scene", s2?.cached === false);
+      check(
+        "Audio state reflects a real not-yet-generated scene (or real completion if TTS ran)",
+        ttsRanToCompletion ? s2?.cached === true : s2?.cached === false,
+        `cached=${s2?.cached}`
+      );
     }
 
     // ------------------------------------------------------------------

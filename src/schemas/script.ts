@@ -1,6 +1,27 @@
 import { z } from "zod";
 
 /**
+ * V2.6: who last touched this artifact/claim, and whether a human's edit has been
+ * re-verified. `PROVENANCE_REQUIRES_REVIEW` is set automatically when narration text
+ * changes in a way that alters its numeric content (see `detectFactualDrift` in
+ * script-qa.ts) and blocks script approval (`assertScriptApproved`,
+ * src/orchestrator/production-gate.ts) until it's cleared by re-validation or an explicit,
+ * justified override (-> HUMAN_OVERRIDDEN). Never silently reverts to a verified status.
+ */
+export const EditedBySchema = z.enum(["AGENT", "HUMAN"]);
+export type EditedBy = z.infer<typeof EditedBySchema>;
+
+export const ClaimProvenanceStatusEnum = z.enum([
+  "SUPPORTED",
+  "PLAUSIBLE",
+  "UNCERTAIN",
+  "DISPUTED",
+  "PROVENANCE_REQUIRES_REVIEW",
+  "HUMAN_OVERRIDDEN"
+]);
+export type ClaimProvenanceStatus = z.infer<typeof ClaimProvenanceStatusEnum>;
+
+/**
  * V2.3 (spec §25): a structured, evidence-traceable claim carried by a scene, as opposed
  * to the legacy free-text `claims: string[]`. Every factual sentence that cites this
  * should be resolvable to real evidence-graph.json ids — enforced by the claim-gate's
@@ -13,7 +34,10 @@ export const ScriptClaimSchema = z.object({
   evidenceIds: z.array(z.string()).min(1).describe("evidence-graph.json claimId/evidenceId references"),
   confidence: z.number().min(0).max(1),
   narrativeRole: z.string().describe("Why this claim appears here, e.g. 'establishes the central tension'"),
-  visualOpportunityId: z.string().optional().describe("visual-evidence-map.json visualOpportunityId, if this claim has one")
+  visualOpportunityId: z.string().optional().describe("visual-evidence-map.json visualOpportunityId, if this claim has one"),
+  provenanceStatus: ClaimProvenanceStatusEnum.optional().describe("V2.6: set by the claim gate / narration editor, see ClaimProvenanceStatusEnum"),
+  overrideReason: z.string().optional().describe("V2.6: required justification when provenanceStatus is HUMAN_OVERRIDDEN"),
+  overriddenAt: z.string().optional()
 });
 export type ScriptClaim = z.infer<typeof ScriptClaimSchema>;
 
@@ -31,7 +55,9 @@ export const ScriptSceneSchema = z.object({
     .optional()
     .default([])
     .describe("V2.3: structured, evidence-id-traceable claims for this scene (no orphan factual claims)"),
-  visualMode: z.string().optional().describe("Intended visual mode (e.g. data_visualization, technical_diagram, comparison)")
+  visualMode: z.string().optional().describe("Intended visual mode (e.g. data_visualization, technical_diagram, comparison)"),
+  editedBy: EditedBySchema.optional().describe("V2.6: who last wrote this scene's narration"),
+  originalNarration: z.string().optional().describe("V2.6: agent-authored narration before the first human edit, kept for diffing/rollback context")
 });
 export type ScriptScene = z.infer<typeof ScriptSceneSchema>;
 

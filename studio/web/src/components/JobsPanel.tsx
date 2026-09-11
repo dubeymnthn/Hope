@@ -3,6 +3,7 @@ import { api, RenderJob, subscribeJobEvents } from "../api/client.js";
 
 function describeScope(scope: RenderJob["scope"]): string {
   if (scope === "full") return "full render";
+  if (scope === "produce") return "production";
   if (scope === "tts") return "TTS";
   return `scene ${scope.scene}`;
 }

@@ -179,6 +179,8 @@ export function ProjectsPage() {
 function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [topic, setTopic] = useState("");
   const [generate, setGenerate] = useState(false);
+  const [designMd, setDesignMd] = useState("");
+  const [showDesign, setShowDesign] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -187,7 +189,7 @@ function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     setBusy(true);
     setError(null);
     try {
-      const { id } = await api.createProject(topic.trim(), generate);
+      const { id } = await api.createProject(topic.trim(), generate, designMd.trim() || undefined);
       onCreated();
       onClose();
       navigate("overview", id);
@@ -265,8 +267,23 @@ function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               checked={generate}
               onChange={(e) => setGenerate(e.target.checked)}
             />
-            <span>Dispatch autonomous generation pipeline immediately</span>
+            <span>Start research immediately (pauses for your review before argument/script/production)</span>
           </label>
+
+          <div>
+            <button type="button" className="btn btn-secondary" style={{ fontSize: "var(--text-xs)" }} onClick={() => setShowDesign((s) => !s)}>
+              {showDesign ? "Hide" : "Add"} design.md (optional visual style brief)
+            </button>
+            {showDesign && (
+              <textarea
+                value={designMd}
+                onChange={(e) => setDesignMd(e.target.value)}
+                rows={5}
+                placeholder="Describes HOW the documentary should look — never facts. e.g. 'Restrained editorial documentary, warm muted palette, slow deliberate pacing.'"
+                style={{ width: "100%", marginTop: "var(--space-2)", background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "var(--space-2)", fontSize: "var(--text-sm)" }}
+              />
+            )}
+          </div>
         </div>
 
         <div

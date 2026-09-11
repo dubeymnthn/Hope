@@ -29,7 +29,13 @@ export const ResearchQuestionSchema = z.object({
   freshnessRequirement: FreshnessRequirementEnum,
   dependentQuestions: z.array(z.string()).default([]).describe("questionIds that should be answered first"),
   answeredBy: z.array(z.string()).default([]).describe("claimIds (from evidence-graph.json) that answer this question"),
-  remainingGap: z.string().optional().describe("What is still missing if not fully answered")
+  remainingGap: z.string().optional().describe("What is still missing if not fully answered"),
+  editedBy: z.enum(["AGENT", "HUMAN"]).optional().describe("V2.6: who last wrote this question"),
+  // Plain `.optional()`, no `.default()`: a default here would make the OUTPUT type
+  // require this field, breaking every existing object literal typed against
+  // `ResearchQuestion` (e.g. test-v23-research.ts's fixtures). Absent means relevant;
+  // read as `relevant !== false`, never `relevant === true`.
+  relevant: z.boolean().optional().describe("V2.6: a human can mark a question irrelevant without deleting it (absent = relevant)")
 });
 export type ResearchQuestion = z.infer<typeof ResearchQuestionSchema>;
 

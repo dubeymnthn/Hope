@@ -35,6 +35,16 @@ export type SourceType = z.infer<typeof SourceTypeEnum>;
 export const PrimaryOrSecondaryEnum = z.enum(["primary", "secondary"]);
 export type PrimaryOrSecondary = z.infer<typeof PrimaryOrSecondaryEnum>;
 
+/**
+ * V2.6: distinguishes agent-authored content from a human's edit/addition and an
+ * unverified manual entry — never treat a human-added number as verified research just
+ * because it sits in the same JSON shape (spec §9 "evidence safety"). Absent (undefined)
+ * is treated as AGENT_GENERATED everywhere this is read, so every pre-V2.6 fixture and
+ * workspace needs no rewrite.
+ */
+export const EvidenceProvenanceEnum = z.enum(["AGENT_GENERATED", "HUMAN_EDIT", "UNVERIFIED"]);
+export type EvidenceProvenance = z.infer<typeof EvidenceProvenanceEnum>;
+
 /** Temporal status of a piece of evidence (spec section 13) — never mix these silently. */
 export const TemporalStatusEnum = z.enum([
   "HISTORICAL",
@@ -81,7 +91,8 @@ export const EvidenceSchema = z.object({
   confidence: z.number().min(0).max(1),
   relevance: z.number().min(0).max(1),
   temporalStatus: TemporalStatusEnum,
-  notes: z.string().optional()
+  notes: z.string().optional(),
+  provenance: EvidenceProvenanceEnum.optional()
 });
 export type Evidence = z.infer<typeof EvidenceSchema>;
 
@@ -107,7 +118,8 @@ export const DataPointSchema = z.object({
   comparableGroup: z
     .string()
     .optional()
-    .describe("Data points sharing this key are asserted directly comparable; otherwise never merge them")
+    .describe("Data points sharing this key are asserted directly comparable; otherwise never merge them"),
+  provenance: EvidenceProvenanceEnum.optional()
 });
 export type DataPoint = z.infer<typeof DataPointSchema>;
 
@@ -206,7 +218,8 @@ export const ClaimSchema = z.object({
   entityIds: z.array(z.string()).default([]),
   eventIds: z.array(z.string()).default([]),
   temporalStatus: TemporalStatusEnum,
-  confidence: z.number().min(0).max(1)
+  confidence: z.number().min(0).max(1),
+  provenance: EvidenceProvenanceEnum.optional()
 });
 export type Claim = z.infer<typeof ClaimSchema>;
 

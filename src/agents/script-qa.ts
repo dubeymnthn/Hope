@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ScriptResult } from "../schemas/script.js";
+import { ScriptResult, ScriptScene } from "../schemas/script.js";
 import { ResearchResult } from "../schemas/research.js";
 import { ArgumentResult } from "../schemas/argument.js";
 import { ChannelConfig } from "../schemas/channel.js";
@@ -69,6 +69,74 @@ function normalizeNumeric(s: string): string {
     .replace(/billion/g, "bn")
     .replace(/trillion/g, "tn")
     .trim();
+}
+
+/** Numbers/percentages/currency this text contains, normalized for comparison (V2.6). */
+export function extractNumbers(text: string): string[] {
+  return Array.from(text.matchAll(QUANTITATIVE_CLAIM)).map((m) => normalizeNumeric(m[0]));
+}
+
+/** Whether every number in `claimNumbers` matches at least one of `resolvedNumbers` (V2.6). */
+export function numbersMatch(claimNumbers: string[], resolvedNumbers: Set<string>): boolean {
+  const resolvedArr = Array.from(resolvedNumbers);
+  return claimNumbers.every((cn) => resolvedArr.some((rn) => rn === cn || (rn.length > 1 && (rn.includes(cn) || cn.includes(rn)))));
+}
+
+/** Every structured number a scriptClaim's own cited evidence/dataPoints actually carry (V2.6, shared by E5 and narration-editor.ts). */
+export function resolveClaimNumbers(evidenceIds: string[], evidenceGraph: EvidenceGraph): Set<string> {
+  const claimsById = new Map(evidenceGraph.claims.map((c) => [c.claimId, c]));
+  const evidenceById = new Map(evidenceGraph.evidence.map((e) => [e.evidenceId, e]));
+  const dataPointsById = new Map(evidenceGraph.dataPoints.map((d) => [d.dataPointId, d]));
+  const resolved = new Set<string>();
+  for (const id of evidenceIds) {
+    const relatedClaim = claimsById.get(id);
+    for (const dpId of relatedClaim?.dataPointIds ?? []) {
+      const dp = dataPointsById.get(dpId);
+      if (dp) resolved.add(normalizeNumeric(`${dp.value}${dp.unit}`));
+    }
+    const ev = evidenceById.get(id);
+    if (ev?.dataValue) {
+      resolved.add(normalizeNumeric(`${ev.dataValue}${ev.unit ?? ""}`));
+      for (const m of extractNumbers(`${ev.dataValue} ${ev.unit ?? ""}`)) resolved.add(m);
+    }
+  }
+  return resolved;
+}
+
+/**
+ * V2.6: does this scene's CURRENT narration still match the numbers its own scriptClaims'
+ * cited evidence actually supports? Used by the narration editor both to flag a claim
+ * PROVENANCE_REQUIRES_REVIEW (returns false) and, on a later edit, to clear that flag via
+ * revalidation (returns true) — the same check both directions, so a flag can never be
+ * cleared by a lens that didn't actually re-examine what set it (spec §18).
+ * Returns true (nothing to flag) whenever there's no structured number to check against,
+ * or the narration itself asserts no number — never a false positive on prose alone.
+ */
+export function sceneNarrationMatchesEvidence(scene: ScriptScene, evidenceGraph: EvidenceGraph): boolean {
+  const resolvedNumbers = new Set<string>();
+  for (const sc of scene.scriptClaims ?? []) {
+    for (const n of resolveClaimNumbers(sc.evidenceIds, evidenceGraph)) resolvedNumbers.add(n);
+  }
+  if (resolvedNumbers.size === 0) return true;
+
+  const narrationNumbers = extractNumbers(scene.narration);
+  if (narrationNumbers.length === 0) return true;
+
+  return numbersMatch(narrationNumbers, resolvedNumbers);
+}
+
+/**
+ * V2.6 fallback for when no evidence graph is supplied: does an edited narration change
+ * its own numeric content at all? Coarser than `sceneNarrationMatchesEvidence` (it can't
+ * tell if the NEW number is correct, only that something changed), but still catches the
+ * spec's "89% -> more than 90%" example when there's no evidence graph to check against.
+ */
+export function detectFactualDrift(oldNarration: string, newNarration: string): boolean {
+  const oldNums = new Set(extractNumbers(oldNarration));
+  const newNums = new Set(extractNumbers(newNarration));
+  if (oldNums.size !== newNums.size) return true;
+  for (const n of oldNums) if (!newNums.has(n)) return true;
+  return false;
 }
 
 /** Word n-grams used for repetition detection. */
@@ -252,6 +320,49 @@ export class ScriptQAAgent {
           `Orphan factual claims (evidenceIds not in research/evidence-graph.json): ` +
             orphans.slice(0, 8).join("; ") +
             (orphans.length > 8 ? ` and ${orphans.length - 8} more` : "")
+        );
+      }
+    }
+
+    // E5. Claim Numeric Fidelity (V2.6): E4 only checks that evidenceIds *resolve*; this
+    // checks that a claim's own cited evidence actually *supports the specific number* the
+    // claim asserts — closing the gap where a retyped or fabricated figure could cite real
+    // but unrelated evidence and still pass every other check. Inert (no false positives)
+    // whenever a claim's cited evidence carries no structured number at all — qualitative
+    // claims are never flagged.
+    if (evidenceGraph && scenesWithScriptClaims.length > 0) {
+      const mismatched: Array<{ sceneId: string; scriptClaimId: string; claimNumbers: string[]; resolvedNumbers: string[] }> = [];
+
+      for (const scene of scenesWithScriptClaims) {
+        for (const sc of scene.scriptClaims ?? []) {
+          const resolvedNumbers = resolveClaimNumbers(sc.evidenceIds, evidenceGraph);
+          // Nothing structured to check this claim's numbers against — skip, don't fail it.
+          if (resolvedNumbers.size === 0) continue;
+
+          const claimNumbers = extractNumbers(sc.claimText);
+          if (claimNumbers.length === 0) continue;
+
+          if (!numbersMatch(claimNumbers, resolvedNumbers)) {
+            mismatched.push({ sceneId: scene.id, scriptClaimId: sc.scriptClaimId, claimNumbers, resolvedNumbers: Array.from(resolvedNumbers) });
+          }
+        }
+      }
+
+      const fidelityPass = mismatched.length === 0;
+      checks.push({
+        name: "Claim Numeric Fidelity",
+        category: "evidence",
+        passed: fidelityPass,
+        message: fidelityPass
+          ? "Every scriptClaim's own numbers match the evidence it cites"
+          : `${mismatched.length} scriptClaim(s) assert a number their own cited evidence does not support`,
+        details: mismatched
+      });
+      if (!fidelityPass) {
+        errors.push(
+          `Claim numbers don't match their own cited evidence (possible retyped/fabricated figure): ` +
+            mismatched.map((m) => `${m.sceneId}/${m.scriptClaimId}`).slice(0, 8).join("; ") +
+            (mismatched.length > 8 ? ` and ${mismatched.length - 8} more` : "")
         );
       }
     }
