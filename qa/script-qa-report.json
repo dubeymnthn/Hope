@@ -1,0 +1,74 @@
+{
+  "status": "WARN",
+  "evaluatedAt": "2026-09-11T01:20:20.015Z",
+  "totalScenes": 6,
+  "totalWords": 181,
+  "estimatedDurationMinutes": 1.2,
+  "checks": [
+    {
+      "name": "Cold Open Hook Integrity",
+      "category": "editorial",
+      "passed": true,
+      "message": "Hook provides clear premise within first 10-15s"
+    },
+    {
+      "name": "Ending Synthesis & Conclusion",
+      "category": "editorial",
+      "passed": true,
+      "message": "Closing takeaway or call to action present"
+    },
+    {
+      "name": "Narrative Beat Density",
+      "category": "editorial",
+      "passed": true,
+      "message": "Script contains 6 narrative scenes",
+      "details": {
+        "sceneCount": 6
+      }
+    },
+    {
+      "name": "Anti-AI-Slop Language Filter",
+      "category": "language",
+      "passed": true,
+      "message": "No generic AI filler phrases detected",
+      "details": []
+    },
+    {
+      "name": "Spoken Sentence Rhythm Variation",
+      "category": "language",
+      "passed": true,
+      "message": "Good distribution of punchy and detailed spoken sentences",
+      "details": {
+        "totalSentences": 11,
+        "shortSentences": 1,
+        "longSentences": 3
+      }
+    },
+    {
+      "name": "Research Metric Traceability",
+      "category": "evidence",
+      "passed": false,
+      "message": "Traced 0 research metrics directly into spoken voiceover",
+      "details": {
+        "verifiedStatsCount": 0,
+        "totalResearchStats": 4
+      }
+    },
+    {
+      "name": "Runtime Duration Assessment",
+      "category": "duration",
+      "passed": false,
+      "message": "Script is shorter than documentary target (1.2m < 7m). Acceptable for short explainers.",
+      "details": {
+        "totalWords": 181,
+        "estimatedMinutes": 1.2,
+        "minMins": 7,
+        "maxMins": 13
+      }
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "Script is shorter than documentary target (1.2m < 7m). Acceptable for short explainers."
+  ]
+}

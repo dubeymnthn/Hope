@@ -1,0 +1,38 @@
+{
+  "name": "youtube-factory",
+  "version": "1.0.0",
+  "description": "Autonomous Faceless YouTube Video Factory powered by HyperFrames and Ollama",
+  "type": "module",
+  "scripts": {
+    "video": "tsx src/cli.ts",
+    "produce": "tsx src/cli.ts",
+    "system:diagnose": "tsx src/system/hardware-diagnostics.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx test/test-pipeline.ts",
+    "milestone1": "tsx test/milestone1.ts",
+    "milestone2": "tsx test/milestone2.ts",
+    "milestone3": "tsx test/milestone3.ts",
+    "milestone4": "tsx test/milestone4.ts",
+    "milestone5": "tsx test/milestone5.ts",
+    "milestone6": "tsx test/milestone6.ts",
+    "milestone7": "tsx test/milestone7.ts",
+    "milestone8": "tsx test/milestone8.ts",
+    "test:v2": "tsx test/test-v2-pipeline.ts"
+  },
+  "dependencies": {
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "dotenv": "^16.4.7",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "gsap": "^3.15.0",
+    "hyperframes": "^0.8.34",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/node": "^22.13.9",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

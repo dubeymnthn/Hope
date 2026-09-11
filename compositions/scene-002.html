@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>scene-002 - THE 3X SILICON PENALTY</title>
+  <style>
+    @font-face {
+      font-family: 'Inter';
+      src: local('Inter'), local('Inter-Regular'), local('sans-serif');
+      font-weight: 100 900;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'JetBrains Mono';
+      src: local('JetBrains Mono'), local('JetBrainsMono-Regular'), local('monospace');
+      font-weight: 100 800;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Fira Code';
+      src: local('Fira Code'), local('FiraCode-Regular'), local('monospace');
+      font-weight: 300 700;
+      font-display: swap;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #08090e;
+      color: #ffffff;
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif, -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #root {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      background: radial-gradient(circle at 50% 20%, #10121a 0%, #08090e 85%);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 80px 100px 120px 100px;
+    }
+
+    .ambient-glow-left {
+      position: absolute;
+      top: -20%;
+      left: -10%;
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(0, 245, 255, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      filter: blur(80px);
+    }
+
+    .ambient-glow-right {
+      position: absolute;
+      bottom: -20%;
+      right: -10%;
+      width: 900px;
+      height: 900px;
+      background: radial-gradient(circle, rgba(138, 43, 226, 0.09) 0%, transparent 70%);
+      pointer-events: none;
+      filter: blur(90px);
+    }
+
+    .cad-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 80px 80px;
+      background-position: center center;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .doc-header {
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 16px;
+    }
+
+    .doc-meta-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .series-title {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace, monospace;
+      font-size: 14px;
+      color: #94a3b8;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+    }
+
+    .category-tag {
+      background: rgba(0, 245, 255, 0.12);
+      border: 1px solid rgba(0, 245, 255, 0.35);
+      color: #00f5ff;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace, monospace;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .telemetry-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace, monospace;
+      font-size: 12px;
+      color: #00ff88;
+      letter-spacing: 1.5px;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00ff88;
+      box-shadow: 0 0 12px #00ff88;
+    }
+
+    .headline-block {
+      z-index: 10;
+      margin-top: 18px;
+      margin-bottom: 20px;
+    }
+
+    .headline-block h1 {
+      font-size: 54px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      line-height: 1.1;
+      text-transform: uppercase;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .headline-block h1 .accent-hit {
+      color: #00f5ff;
+      text-shadow: 0 0 35px rgba(0, 245, 255, 0.3);
+    }
+
+    .headline-sub {
+      font-size: 20px;
+      color: #94a3b8;
+      font-weight: 400;
+      max-width: 1400px;
+      line-height: 1.4;
+    }
+
+    .visual-viewport {
+      z-index: 10;
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      margin: 10px 0;
+    }
+
+    .doc-footer {
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 14px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace, monospace;
+      font-size: 12px;
+      color: #94a3b8;
+      letter-spacing: 1px;
+    }
+
+    .doc-footer-source {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .source-label {
+      color: #94a3b8;
+      font-weight: 700;
+    }
+
+    .source-data {
+      color: #00f5ff;
+      background: rgba(0, 245, 255, 0.08);
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(0, 245, 255, 0.2);
+    }
+
+    .glass-card {
+      background: rgba(22, 25, 36, 0.75);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    }
+
+    
+      /* Data Vis */
+      .data-vis-grid { display: flex; gap: 30px; width: 100%; height: 100%; }
+      .metric-hero-panel { width: 440px; padding: 36px; display: flex; flex-direction: column; justify-content: center; }
+      .huge-counter { font-size: 88px; font-weight: 900; color: #00f5ff; line-height: 1; margin: 16px 0; }
+      .metric-caption { font-size: 20px; font-weight: 700; color: #ffffff; }
+      .metric-subdetail { font-size: 14px; color: #94a3b8; margin-top: 8px; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+      .chart-hero-panel { flex: 1; padding: 30px; display: flex; flex-direction: column; }
+      .chart-header { display: flex; justify-content: space-between; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
+      .chart-status { color: #ff007f; font-weight: 700; }
+      .data-svg { width: 100%; height: 100%; }
+
+      /* Comparison */
+      .comparison-container { display: flex; gap: 24px; width: 100%; height: 100%; align-items: center; }
+      .comp-panel { flex: 1; padding: 24px; height: 100%; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
+      .panel-tag { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; color: #94a3b8; letter-spacing: 2px; }
+      .panel-tag.accent { color: #00f5ff; }
+      .wafer-display { width: 300px; height: 300px; margin: 10px auto; }
+      .wafer-stats { display: flex; gap: 16px; width: 100%; justify-content: center; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; }
+      .stat-box .accent { color: #00f5ff; font-weight: bold; }
+      .penalty-bridge { width: 260px; padding: 20px; text-align: center; }
+      .bridge-tag { font-size: 11px; color: #94a3b8; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+      .bridge-number { font-size: 64px; font-weight: 900; color: #ff007f; }
+      .bridge-desc { font-size: 11px; color: #94a3b8; }
+
+      /* Timeline */
+      .timeline-full-layout { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 24px; }
+      .supplier-status-grid { display: flex; gap: 24px; }
+      .supplier-card { flex: 1; padding: 20px; }
+      .supplier-header { display: flex; justify-content: space-between; font-size: 13px; font-family: 'JetBrains Mono', 'Fira Code', monospace; margin-bottom: 12px; }
+      .status-pill.sold-out { color: #ffffff; background: #b91c1c; padding: 3px 8px; border-radius: 4px; font-weight: bold; }
+      .bar-track { height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; margin-bottom: 8px; }
+      .bar-fill.full-bar { height: 100%; width: 100%; background: #00f5ff; }
+      .supplier-footer-meta { display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+      .timeline-strip-card { flex: 1; padding: 24px; display: flex; flex-direction: column; justify-content: center; }
+      .timeline-title-bar { font-size: 12px; color: #94a3b8; font-family: 'JetBrains Mono', 'Fira Code', monospace; margin-bottom: 24px; }
+      .strip-container { display: flex; align-items: center; justify-content: space-between; padding: 0 40px; }
+      .time-node { text-align: center; }
+      .node-badge { font-size: 13px; color: #00f5ff; font-family: 'JetBrains Mono', 'Fira Code', monospace; margin-bottom: 8px; }
+      .node-point { width: 14px; height: 14px; border-radius: 50%; background: #00f5ff; margin: 0 auto 8px; }
+      .node-desc { font-size: 13px; color: #ffffff; max-width: 220px; }
+      .time-connector { flex: 1; height: 3px; background: rgba(255,255,255,0.1); margin: 0 16px; }
+
+      /* Schematic */
+      .diagram-schematic-grid { display: flex; gap: 24px; width: 100%; height: 100%; }
+      .schematic-main-panel { flex: 1; padding: 20px; display: flex; flex-direction: column; }
+      .schematic-header { margin-bottom: 16px; }
+      .schematic-title { font-size: 14px; color: #00f5ff; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-weight: bold; }
+      .schematic-sub { font-size: 12px; color: #94a3b8; }
+      .schematic-svg { width: 100%; height: 100%; }
+      .bottleneck-hud-panel { width: 340px; padding: 30px; display: flex; flex-direction: column; justify-content: space-around; }
+      .hud-label { font-size: 12px; color: #94a3b8; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+      .hud-highlight { font-size: 52px; font-weight: 900; color: #ff007f; margin: 8px 0; }
+      .hud-sub { font-size: 12px; color: #94a3b8; }
+      .hud-val { font-size: 18px; font-weight: bold; color: #00f5ff; margin: 6px 0; }
+
+      /* Siphon */
+      .siphon-layout { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 24px; }
+      .split-metric-bar { display: flex; height: 70px; border-radius: 8px; overflow: hidden; }
+      .bar-section.ai-allocation { flex: 4; background: rgba(0,245,255,0.15); border-right: 2px solid #00f5ff; padding: 12px 20px; }
+      .bar-section.commodity-allocation { flex: 1; background: rgba(255,0,127,0.15); padding: 12px 20px; }
+      .inventory-drain-grid { flex: 1; display: flex; gap: 24px; align-items: center; }
+      .tank-panel { flex: 1; height: 100%; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; }
+      .tank-display { width: 160px; height: 220px; border: 2px solid rgba(255,255,255,0.2); border-radius: 8px; position: relative; overflow: hidden; display: flex; align-items: flex-end; }
+      .tank-liquid.normal-liquid { width: 100%; height: 80%; background: #00f5ff; display: flex; align-items: center; justify-content: center; }
+      .tank-liquid.depleted-liquid { width: 100%; height: 25%; background: #b91c1c; display: flex; align-items: center; justify-content: center; }
+      .tank-level-txt { font-size: 12px; font-weight: bold; color: #ffffff; }
+      .drain-arrow-center { text-align: center; font-size: 28px; color: #ff007f; }
+
+      /* Typography / Tollbooth */
+      .tollbooth-container { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 24px; }
+      .network-diagram-card { flex: 1; display: flex; justify-content: space-around; align-items: center; padding: 24px; }
+      .tollbooth-gate { width: 220px; height: 220px; border-radius: 50%; border: 3px solid #ff007f; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 0 40px rgba(255,0,127,0.3); }
+      .conclusion-box { padding: 28px; text-align: center; }
+      .kinetic-text-line { font-size: 28px; font-weight: 800; color: #ffffff; line-height: 1.3; }
+      .kinetic-text-line.accent-color { color: #00f5ff; }
+    
+  </style>
+  <script src="assets/gsap.min.js"></script>
+</head>
+<body>
+  <div id="root" data-composition-id="scene-002" data-start="0" data-duration="10.76" data-fps="30" data-width="1920" data-height="1080">
+    <div class="ambient-glow-left" data-layout-allow-overflow></div>
+    <div class="ambient-glow-right" data-layout-allow-overflow></div>
+    <div class="cad-grid"></div>
+
+    <header class="doc-header">
+      <div class="doc-meta-left">
+        <span class="series-title">SPECIAL INVESTIGATION // SILICON ECONOMICS</span>
+        <span class="category-tag">COMPARISON</span>
+      </div>
+      <div class="telemetry-indicator">
+        <div class="pulse-dot"></div>
+        <span>LIVE TELEMETRY // ACT-I // 10.8S</span>
+      </div>
+    </header>
+
+    <div class="headline-block">
+      <h1 id="scene-headline"><span class="accent-hit">THE 3X SILICON PENALTY</span></h1>
+      <div id="scene-subhead" class="headline-sub">Split architectural comparison contrasting conventional DDR5 wafer usage with 3D Through-Silicon Via (TSV) HBM stacks.</div>
+    </div>
+
+    <main class="visual-viewport" id="viewport">
+      
+      <div class="comparison-container">
+        <div class="glass-card comp-panel left-panel">
+          <div class="panel-header">
+            <span class="panel-tag">CONVENTIONAL ARCHITECTURE</span>
+            <h2>STANDARD DDR5 DRAM</h2>
+          </div>
+          <div class="wafer-display">
+            <svg class="wafer-svg" viewBox="0 0 340 340">
+              <circle cx="170" cy="170" r="160" fill="#0d1117" stroke="rgba(255,255,255,0.2)" stroke-width="3"/>
+              <line x1="15" y1="170" x2="15" y2="170" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="29" y1="105.62609224227567" x2="29" y2="234.37390775772434" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="43" y1="81.14056043390775" x2="43" y2="258.85943956609225" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="57" y1="63.90570232100124" x2="57" y2="276.09429767899877" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="71" y1="50.73558787299541" x2="71" y2="289.26441212700456" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="85" y1="40.38518603184281" x2="85" y2="299.6148139681572" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="99" y1="32.217562802801325" x2="99" y2="307.78243719719865" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="113" y1="25.86117802618199" x2="113" y2="314.13882197381804" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="127" y1="21.083916248109716" x2="127" y2="318.91608375189026" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="141" y1="17.737069514605764" x2="141" y2="322.26293048539424" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="155" y1="15.727513794584866" x2="155" y2="324.27248620541513" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="169" y1="15.003225840019496" x2="169" y2="324.99677415998053" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="183" y1="15.546123389537428" x2="183" y2="324.45387661046254" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="197" y1="17.3697277732887" x2="197" y2="322.6302722267113" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="211" y1="20.520904471561636" x2="211" y2="319.4790955284384" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="225" y1="25.086232538105605" x2="225" y2="314.9137674618944" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="239" y1="31.205187416820223" x2="239" y2="308.7948125831798" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="253" y1="39.09545462437143" x2="253" y2="300.9045453756286" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="267" y1="49.1033499223407" x2="267" y2="290.8966500776593" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="281" y1="61.81497330961183" x2="281" y2="278.18502669038816" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="295" y1="78.3484861008832" x2="295" y2="261.6515138991168" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="309" y1="101.41428720207101" x2="309" y2="238.58571279792898" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="323" y1="145.18065270801827" x2="323" y2="194.81934729198173" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="170" y1="15" x2="170" y2="15" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="105.62609224227567" y1="29" x2="234.37390775772434" y2="29" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="81.14056043390775" y1="43" x2="258.85943956609225" y2="43" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="63.90570232100124" y1="57" x2="276.09429767899877" y2="57" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="50.73558787299541" y1="71" x2="289.26441212700456" y2="71" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="40.38518603184281" y1="85" x2="299.6148139681572" y2="85" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="32.217562802801325" y1="99" x2="307.78243719719865" y2="99" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="25.86117802618199" y1="113" x2="314.13882197381804" y2="113" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="21.083916248109716" y1="127" x2="318.91608375189026" y2="127" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="17.737069514605764" y1="141" x2="322.26293048539424" y2="141" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="15.727513794584866" y1="155" x2="324.27248620541513" y2="155" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="15.003225840019496" y1="169" x2="324.99677415998053" y2="169" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="15.546123389537428" y1="183" x2="324.45387661046254" y2="183" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="17.3697277732887" y1="197" x2="322.6302722267113" y2="197" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="20.520904471561636" y1="211" x2="319.4790955284384" y2="211" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="25.086232538105605" y1="225" x2="314.9137674618944" y2="225" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="31.205187416820223" y1="239" x2="308.7948125831798" y2="239" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="39.09545462437143" y1="253" x2="300.9045453756286" y2="253" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="49.1033499223407" y1="267" x2="290.8966500776593" y2="267" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="61.81497330961183" y1="281" x2="278.18502669038816" y2="281" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="78.3484861008832" y1="295" x2="261.6515138991168" y2="295" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="101.41428720207101" y1="309" x2="238.58571279792898" y2="309" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+<line x1="145.18065270801827" y1="323" x2="194.81934729198173" y2="323" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+            </svg>
+          </div>
+          <div class="wafer-stats">
+            <div class="stat-box"><span class="k">DIE YIELD</span><span class="v">~1,200 DIES</span></div>
+            <div class="stat-box"><span class="k">PACKAGING</span><span class="v">STANDARD</span></div>
+          </div>
+        </div>
+
+        <div class="penalty-bridge glass-card">
+          <div class="bridge-tag">SILICON CONSUMPTION FACTOR</div>
+          <div class="bridge-number" id="penalty-mult">3.0x</div>
+          <div class="bridge-desc">SURFACE AREA DEFICIT PER EQUIVALENT GIGABYTE</div>
+        </div>
+
+        <div class="glass-card comp-panel right-panel active-focus">
+          <div class="panel-header">
+            <span class="panel-tag accent">ADVANCED AI SILICON</span>
+            <h2>HIGH BANDWIDTH MEMORY (HBM3e)</h2>
+          </div>
+          <div class="wafer-display">
+            <svg class="wafer-svg" viewBox="0 0 340 340">
+              <circle cx="170" cy="170" r="160" fill="#0d1117" stroke="#00f5ff" stroke-width="4"/>
+              <line x1="15" y1="170" x2="15" y2="170" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="41" y1="84.06979576423666" x2="41" y2="255.93020423576334" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="67" y1="54.172542115437935" x2="67" y2="285.8274578845621" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="93" y1="35.478626233598106" x2="93" y2="304.5213737664019" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="119" y1="23.630604291744106" x2="119" y2="316.36939570825587" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="145" y1="17.029414592216455" x2="145" y2="322.9705854077836" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="171" y1="15.003225840019496" x2="171" y2="324.99677415998053" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="197" y1="17.3697277732887" x2="197" y2="322.6302722267113" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="223" y1="24.342868351735007" x2="223" y2="315.657131648265" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="249" y1="36.64333537464279" x2="249" y2="303.3566646253572" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="275" y1="55.982457490086205" x2="275" y2="284.0175425099138" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="301" y1="87.15073929116808" x2="301" y2="252.84926070883193" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="170" y1="15" x2="170" y2="15" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="84.06979576423666" y1="41" x2="255.93020423576334" y2="41" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="54.172542115437935" y1="67" x2="285.8274578845621" y2="67" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="35.478626233598106" y1="93" x2="304.5213737664019" y2="93" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="23.630604291744106" y1="119" x2="316.36939570825587" y2="119" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="17.029414592216455" y1="145" x2="322.9705854077836" y2="145" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="15.003225840019496" y1="171" x2="324.99677415998053" y2="171" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="17.3697277732887" y1="197" x2="322.6302722267113" y2="197" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="24.342868351735007" y1="223" x2="315.657131648265" y2="223" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="36.64333537464279" y1="249" x2="303.3566646253572" y2="249" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="55.982457490086205" y1="275" x2="284.0175425099138" y2="275" stroke="#00f5ff" stroke-width="0.8"/>
+<line x1="87.15073929116808" y1="301" x2="252.84926070883193" y2="301" stroke="#00f5ff" stroke-width="0.8"/>
+            </svg>
+          </div>
+          <div class="wafer-stats">
+            <div class="stat-box"><span class="k">DIE YIELD</span><span class="v accent">~380 DIES</span></div>
+            <div class="stat-box"><span class="k">INTERCONNECT</span><span class="v accent">3D TSV STACK</span></div>
+          </div>
+        </div>
+      </div>
+    
+    </main>
+
+    
+      <footer class="doc-footer">
+        <div class="doc-footer-source">
+          <span class="source-label">EMPIRICAL DATA CITATIONS:</span>
+          <span class="source-data">SEMIANALYSIS • TRENDFORCE • BLOOMBERG INTEL</span>
+        </div>
+        <div class="doc-footer-right">
+          <span>CHAPTER: ANALYSIS // AUTHENTICATED AUDIT</span>
+        </div>
+      </footer>
+    
+  </div>
+
+  
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+    window.__timelines["scene-002"] = tl;
+
+    // Timeline padding to guarantee authoritative duration
+    tl.to({}, { duration: 10.76 }, 0);
+
+    // Camera ambient push
+    tl.to("#root", { scale: 1.02, duration: 10.76, ease: "none" }, 0);
+
+    // Headline entrance
+    tl.from("#scene-headline", { opacity: 0, y: 25, duration: 0.8, ease: "power3.out" }, 0.1);
+    tl.from("#scene-subhead", { opacity: 0, y: 15, duration: 0.8, ease: "power3.out" }, 0.3);
+
+    // Primitive animations based on mode
+    
+          tl.from(".left-panel", { x: -40, opacity: 0, duration: 0.9, ease: "power3.out" }, 0.3);
+          tl.from(".right-panel", { x: 40, opacity: 0, duration: 0.9, ease: "power3.out" }, 0.5);
+          tl.from("#penalty-mult", { scale: 0, opacity: 0, duration: 0.8, ease: "elastic.out(1, 0.75)" }, 0.8);
+        
+  </script>
+    
+</body>
+</html>

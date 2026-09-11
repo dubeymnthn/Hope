@@ -1,0 +1,112 @@
+{
+  "status": "PASS",
+  "auditedAt": "2026-09-11T01:20:23.316Z",
+  "categories": {
+    "visualStructural": "PASS",
+    "audioStream": "PASS",
+    "audioLoudness": "PASS",
+    "synchronization": "PASS",
+    "frameInspection": "PASS"
+  },
+  "checks": [
+    {
+      "name": "Video File Present",
+      "category": "visual_structural",
+      "passed": true,
+      "actual": "34308.7 KB",
+      "expected": "Non-empty MP4 (> 1000 bytes)",
+      "severity": "critical"
+    },
+    {
+      "name": "Narration Audio Source Present",
+      "category": "audio_stream",
+      "passed": true,
+      "actual": "2953.2 KB",
+      "expected": "Non-empty WAV (> 1000 bytes)",
+      "severity": "critical"
+    },
+    {
+      "name": "1080p Resolution",
+      "category": "visual_structural",
+      "passed": true,
+      "actual": "1920x1080",
+      "expected": "1920x1080",
+      "severity": "critical"
+    },
+    {
+      "name": "30fps Frame Rate",
+      "category": "visual_structural",
+      "passed": true,
+      "actual": "30fps",
+      "expected": "30fps",
+      "severity": "warning"
+    },
+    {
+      "name": "H.264 Video Codec",
+      "category": "visual_structural",
+      "passed": true,
+      "actual": "h264",
+      "expected": "h264 / avc1",
+      "severity": "critical"
+    },
+    {
+      "name": "Muxed AAC Audio Stream",
+      "category": "audio_stream",
+      "passed": true,
+      "actual": "Codec: aac, Rate: 48000Hz, Channels: 2",
+      "expected": "Present (AAC, 48kHz or 24kHz)",
+      "severity": "critical"
+    },
+    {
+      "name": "Audio Non-Silence & Audible Loudness",
+      "category": "audio_loudness",
+      "passed": true,
+      "actual": "Mean: -21.1 dB, Max: -2.9 dB (Silent: false)",
+      "expected": "Mean > -50 dB, Max > -40 dB (Audible Narration)",
+      "severity": "critical"
+    },
+    {
+      "name": "Audio/Visual Duration Sync",
+      "category": "synchronization",
+      "passed": true,
+      "actual": "Video: 63.00s, Audio: 63.00s (Drift: 0.00s)",
+      "expected": "Drift < 1.0s",
+      "severity": "warning"
+    },
+    {
+      "name": "Captions Subtitles (SRT)",
+      "category": "synchronization",
+      "passed": true,
+      "actual": "1371 bytes",
+      "expected": "Valid SRT file (> 50 bytes)",
+      "severity": "warning"
+    },
+    {
+      "name": "Scene Continuity & Completeness",
+      "category": "visual_structural",
+      "passed": true,
+      "actual": "6 storyboard scenes for 6 script scenes",
+      "expected": "1:1 Scene mapping with non-zero durations",
+      "severity": "critical"
+    },
+    {
+      "name": "HyperFrames Pre-Render Gate",
+      "category": "visual_structural",
+      "passed": true,
+      "actual": "Passed (WCAG Contrast AA Verified)",
+      "expected": "Valid HyperFrames HTML/CSS/JS compositions",
+      "severity": "warning"
+    },
+    {
+      "name": "Representative Frame Inspection (0%, 25%, 50%, 75%, 98%)",
+      "category": "frame_inspection",
+      "passed": true,
+      "actual": "0% (0.5s): 121.3 KB; 25% (15.8s): 162.7 KB; 50% (31.5s): 141.7 KB; 75% (47.3s): 142.2 KB; 98% (62s): 150.8 KB",
+      "expected": "All 5 frames rendered and non-empty (>20KB each)",
+      "severity": "critical"
+    }
+  ],
+  "errors": [],
+  "warnings": [],
+  "summary": "Automated QA Audit completed with status PASS. 0 critical errors, 0 warnings."
+}

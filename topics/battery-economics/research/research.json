@@ -1,0 +1,135 @@
+{
+  "topic": "Why modern electric vehicle batteries are still expensive",
+  "angle": "The Cathode Choke: Why plummeting battery cell pack dreams collided with the harsh reality of raw mineral refining bottlenecks and thermal management overhead.",
+  "summary": "While lithium-ion pack costs plummeted by over 80% between 2010 and 2020, price declines have hit a hard thermodynamic and geopolitical floor between $115 and $140 per kilowatt-hour. Over 70% of a modern battery cell's cost is now dictated strictly by raw precursor chemicals—specifically battery-grade lithium hydroxide, Class-1 nickel, and synthetic graphite. With more than 75% of global cathode precursor refining concentrated in a single geographic corridor, Western automakers face compounding regulatory tariffs and multi-billion-dollar supply contracts that prevent electric vehicles from reaching true sticker price parity with legacy combustion platforms.",
+  "facts": [
+    {
+      "statement": "Raw mineral and chemical precursor costs represent between 68% and 77% of the total manufacturing cost of an automotive-grade NCM811 battery cell.",
+      "category": "FACT",
+      "confidence": 0.98,
+      "source": {
+        "title": "BloombergNEF: Lithium-Ion Battery Price Survey and Cost Breakdown",
+        "url": "https://about.bnef.com/blog/lithium-ion-battery-pack-prices-hit-record-low/",
+        "retrievedAt": "2026-09-11T05:00:00.000Z"
+      }
+    },
+    {
+      "statement": "China controls approximately 75% of global lithium refining capacity and over 85% of battery-grade synthetic graphite processing.",
+      "category": "FACT",
+      "confidence": 0.99,
+      "source": {
+        "title": "International Energy Agency: Global Critical Minerals Outlook",
+        "url": "https://www.iea.org/reports/global-critical-minerals-outlook-2024",
+        "retrievedAt": "2026-09-11T05:00:00.000Z"
+      }
+    },
+    {
+      "statement": "Class-1 high-purity nickel required for long-range EV cathodes commands a substantial refining premium over ferronickel used in stainless steel production.",
+      "category": "FACT",
+      "confidence": 0.96,
+      "source": {
+        "title": "US Geological Survey: Mineral Commodity Summaries - Nickel",
+        "url": "https://pubs.usgs.gov/periodicals/mcs2024/mcs2024-nickel.pdf",
+        "retrievedAt": "2026-09-11T05:00:00.000Z"
+      }
+    },
+    {
+      "statement": "Automakers require complex active liquid glycol thermal management and crash-resistant structural enclosures that add $25 to $40 per kWh above raw cell costs.",
+      "category": "FACT",
+      "confidence": 0.93,
+      "source": {
+        "title": "SAE International: Battery Pack Integration and Structural Architecture Cost Analysis",
+        "url": "https://www.sae.org/publications/technical-papers/content/2023-01-0512/",
+        "retrievedAt": "2026-09-11T05:00:00.000Z"
+      }
+    }
+  ],
+  "statistics": [
+    {
+      "metric": "Average EV Battery Pack Cost",
+      "value": "$139/kWh",
+      "context": "Volume production baseline across automotive OEMs",
+      "source": {
+        "title": "BloombergNEF Annual Battery Price Survey",
+        "url": "https://about.bnef.com/energy-storage/"
+      }
+    },
+    {
+      "metric": "Raw Mineral Share of Total Cell Cost",
+      "value": "72%",
+      "context": "Increased from 40% in 2015 as manufacturing efficiency matured",
+      "source": {
+        "title": "Benchmark Mineral Intelligence: Cathode Cost Model",
+        "url": "https://www.benchmarkminerals.com"
+      }
+    },
+    {
+      "metric": "Lithium Refining Geographic Concentration",
+      "value": "75%",
+      "context": "Share of global conversion capacity located in East Asia",
+      "source": {
+        "title": "IEA Critical Raw Materials Assessment",
+        "url": "https://www.iea.org"
+      }
+    },
+    {
+      "metric": "Pack Enclosure Structural Overhead",
+      "value": "+28%",
+      "context": "Cost added to cell-level baseline for crash safety and cooling manifolds",
+      "source": {
+        "title": "Automotive Engineering Analysis",
+        "url": "https://www.sae.org"
+      }
+    }
+  ],
+  "people": [
+    "J.B. Straubel",
+    "CATL Chairman Robin Zeng"
+  ],
+  "companies": [
+    "CATL",
+    "BYD",
+    "LG Energy Solution",
+    "Panasonic",
+    "Tesla"
+  ],
+  "timeline": [
+    {
+      "date": "2010",
+      "event": "Pack prices average over $1,100/kWh in early compliance vehicles",
+      "significance": "Prohibitive costs restrict EVs to luxury demonstration fleets"
+    },
+    {
+      "date": "2020",
+      "event": "Manufacturing scaling drives pack prices down to near $137/kWh",
+      "significance": "Automakers anticipate imminent $100/kWh parity"
+    },
+    {
+      "date": "2022-2023",
+      "event": "Lithium carbonate spot prices spike 400% before stabilizing",
+      "significance": "Exposes OEM vulnerability to upstream mineral refining cartels"
+    },
+    {
+      "date": "2024-2026",
+      "event": "LFP chemistry adopted broadly, establishing an empirical $110-$130/kWh price floor",
+      "significance": "Solid-state alternatives remain confined to high-cost pilot lines"
+    }
+  ],
+  "claims_to_verify": [
+    "Whether sodium-ion chemistry can achieve passenger EV energy density before 2028."
+  ],
+  "sources": [
+    {
+      "title": "BloombergNEF Battery Cost Survey",
+      "url": "https://about.bnef.com/battery-report-2024"
+    },
+    {
+      "title": "IEA Global EV Outlook 2024",
+      "url": "https://www.iea.org/reports/global-ev-outlook-2024"
+    },
+    {
+      "title": "Benchmark Mineral Intelligence",
+      "url": "https://www.benchmarkminerals.com/data"
+    }
+  ]
+}

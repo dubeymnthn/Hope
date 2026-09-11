@@ -1,0 +1,86 @@
+{
+  "version": "1.0.0",
+  "milestones": {
+    "milestone2": {
+      "status": "complete",
+      "artifact": "test-artifacts/milestone2-agent-output.json",
+      "completedAt": "2026-09-10T23:44:14.683Z",
+      "artifactHash": "658981396702226255b5aa61b1e49482316e687c0ab04acbb4ddba2d65c2bb01",
+      "validationVersion": "1.0.0"
+    },
+    "milestone3": {
+      "status": "complete",
+      "artifact": "script/script.json",
+      "completedAt": "2026-09-11T01:13:41.909Z",
+      "artifactHash": "a3af7c2e1588237c685fbf14a9734732a712e475682e5c7147af2f0cfd0a1912",
+      "validationVersion": "1.0.0",
+      "metadata": {
+        "researchArtifact": "research/research.json",
+        "researchHash": "65dc5d273d4c1e78af5c2686bcc8a04cff9732d8f890943e137e10e1319c45e9",
+        "sceneCount": 6,
+        "topic": "Why AI memory prices are exploding"
+      }
+    },
+    "milestone4": {
+      "status": "complete",
+      "artifact": "audio/timestamps.json",
+      "completedAt": "2026-09-11T01:14:56.536Z",
+      "artifactHash": "8d80810d273483fc2186b00d0c92f59afc71842f6926b498deb41dcc071f3dac",
+      "validationVersion": "1.0.0",
+      "metadata": {
+        "audioPath": "audio/narration.wav",
+        "duration": 63,
+        "sampleRate": 24000,
+        "sceneCount": 6
+      }
+    },
+    "milestone5": {
+      "status": "complete",
+      "artifact": "storyboard/storyboard.json",
+      "completedAt": "2026-09-11T01:14:59.605Z",
+      "artifactHash": "f6a52fa35a298e28d4b936dbf5ad46970babdd480200a6190e102880c5b2e31c",
+      "validationVersion": "1.0.0",
+      "metadata": {
+        "designVersion": "2.0.0",
+        "sceneCount": 6,
+        "totalDuration": 63
+      }
+    },
+    "milestone6": {
+      "status": "complete",
+      "artifact": "index.html",
+      "completedAt": "2026-09-11T01:16:01.282Z",
+      "validationVersion": "1.0.0",
+      "metadata": {
+        "sceneCount": 6,
+        "compositionsDir": "compositions",
+        "scenesDir": "scenes"
+      }
+    },
+    "milestone7": {
+      "status": "complete",
+      "artifact": "renders/final-hyperframes.mp4",
+      "completedAt": "2026-09-11T01:20:05.141Z",
+      "validationVersion": "1.0.0",
+      "metadata": {
+        "resolution": "1920x1080",
+        "fps": 30,
+        "duration": 63,
+        "renderTimeMs": 155573
+      }
+    },
+    "milestone8": {
+      "status": "complete",
+      "artifact": "final.mp4",
+      "completedAt": "2026-09-11T01:20:16.568Z",
+      "validationVersion": "1.0.0",
+      "metadata": {
+        "qaStatus": "PASS",
+        "qaReportArtifact": "qa/report.json",
+        "finalVideoSize": 35132058
+      }
+    }
+  },
+  "stages": {},
+  "lastUpdated": "2026-09-11T01:20:16.569Z"
+}

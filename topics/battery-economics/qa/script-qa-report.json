@@ -1,0 +1,74 @@
+{
+  "status": "WARN",
+  "evaluatedAt": "2026-09-11T01:20:59.352Z",
+  "totalScenes": 5,
+  "totalWords": 145,
+  "estimatedDurationMinutes": 1,
+  "checks": [
+    {
+      "name": "Cold Open Hook Integrity",
+      "category": "editorial",
+      "passed": true,
+      "message": "Hook provides clear premise within first 10-15s"
+    },
+    {
+      "name": "Ending Synthesis & Conclusion",
+      "category": "editorial",
+      "passed": true,
+      "message": "Closing takeaway or call to action present"
+    },
+    {
+      "name": "Narrative Beat Density",
+      "category": "editorial",
+      "passed": true,
+      "message": "Script contains 5 narrative scenes",
+      "details": {
+        "sceneCount": 5
+      }
+    },
+    {
+      "name": "Anti-AI-Slop Language Filter",
+      "category": "language",
+      "passed": true,
+      "message": "No generic AI filler phrases detected",
+      "details": []
+    },
+    {
+      "name": "Spoken Sentence Rhythm Variation",
+      "category": "language",
+      "passed": true,
+      "message": "Good distribution of punchy and detailed spoken sentences",
+      "details": {
+        "totalSentences": 10,
+        "shortSentences": 2,
+        "longSentences": 2
+      }
+    },
+    {
+      "name": "Research Metric Traceability",
+      "category": "evidence",
+      "passed": false,
+      "message": "Traced 0 research metrics directly into spoken voiceover",
+      "details": {
+        "verifiedStatsCount": 0,
+        "totalResearchStats": 4
+      }
+    },
+    {
+      "name": "Runtime Duration Assessment",
+      "category": "duration",
+      "passed": false,
+      "message": "Script is shorter than documentary target (1m < 7m). Acceptable for short explainers.",
+      "details": {
+        "totalWords": 145,
+        "estimatedMinutes": 1,
+        "minMins": 7,
+        "maxMins": 13
+      }
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "Script is shorter than documentary target (1m < 7m). Acceptable for short explainers."
+  ]
+}

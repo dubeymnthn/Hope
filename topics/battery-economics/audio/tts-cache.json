@@ -1,0 +1,26 @@
+{
+  "scene-001": {
+    "sceneId": "scene-001",
+    "narrationHash": "1b70fd1963fcfa43b0dae998aaeb1fe53286712d820d260ca0bb2ee2d556d02f",
+    "audioPath": "/home/manthan/Documents/Hope/topics/battery-economics/audio/scene-001.wav",
+    "duration": 10.64,
+    "generationTimeMs": 129299,
+    "completedAt": "2026-09-11T01:23:08.683Z"
+  },
+  "scene-002": {
+    "sceneId": "scene-002",
+    "narrationHash": "1015803c77b53807ba64ce6b65cbb4727ebbd50d5cd14078ef720315be6f3cc4",
+    "audioPath": "/home/manthan/Documents/Hope/topics/battery-economics/audio/scene-002.wav",
+    "duration": 10.48,
+    "generationTimeMs": 134282,
+    "completedAt": "2026-09-11T01:25:22.993Z"
+  },
+  "scene-003": {
+    "sceneId": "scene-003",
+    "narrationHash": "ee8d1174cef56b1a70a25f01dc0af9b3a089348b0e799e6f8250a283935e12af",
+    "audioPath": "/home/manthan/Documents/Hope/topics/battery-economics/audio/scene-003.wav",
+    "duration": 11.08,
+    "generationTimeMs": 150606,
+    "completedAt": "2026-09-11T01:27:53.623Z"
+  }
+}

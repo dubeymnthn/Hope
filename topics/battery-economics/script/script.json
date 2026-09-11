@@ -1,0 +1,42 @@
+{
+  "title": "Why Modern EV Batteries Are Still Expensive: The Cathode Choke",
+  "hook": "For a decade, the auto industry promised that hundred-dollar battery packs would make electric cars cheaper than gasoline. But that curve just hit an impenetrable wall.",
+  "scenes": [
+    {
+      "id": "scene-001",
+      "narration": "Between 2010 and 2020, battery costs plummeted by nearly ninety percent. But today, average electric vehicle battery packs have stalled out near one hundred and thirty-nine dollars per kilowatt hour.",
+      "purpose": "Establish the stubborn battery pack price plateau at 139 dollars per kilowatt hour",
+      "visual_hint": "Statistic card showing $139/kWh average pack cost plateau curve",
+      "visualMode": "data_visualization"
+    },
+    {
+      "id": "scene-002",
+      "narration": "The reason isn't factory inefficiency. Gigafactories are more automated than ever. The trap is that raw cathode minerals have surged from forty percent to over seventy-two percent of total cell costs.",
+      "purpose": "Contrast manufacturing labor overhead against raw mineral domination at 72 percent",
+      "visual_hint": "Comparison breakdown showing bill of materials shift from 40% to 72% raw precursors",
+      "visualMode": "comparison"
+    },
+    {
+      "id": "scene-003",
+      "narration": "From the eleven-hundred dollar compliance cars of 2010 to the mass market inflection of 2020, price cuts came easy. But as spot mineral markets erupted, the low-hanging fruit completely evaporated.",
+      "purpose": "Trace the historic cost curve from 1100 dollars down to the current inflection",
+      "visual_hint": "Milestone timeline tracking battery cost deflation and the commodity inflection point",
+      "visualMode": "timeline"
+    },
+    {
+      "id": "scene-004",
+      "narration": "Compounding the chemical cost, China controls seventy-five percent of global lithium chemical refining and eighty-five percent of synthetic graphite. Building localized supply chains carries a massive capital penalty.",
+      "purpose": "Expose the geographic refining choke point controlling 75 percent of precursor chemicals",
+      "visual_hint": "Technical schematic detailing the precursor refining bottleneck and international tariff walls",
+      "visualMode": "technical_diagram"
+    },
+    {
+      "id": "scene-005",
+      "narration": "Until solid-state chemistry achieves mass automotive yields in the late 2020s, the battery remains less like consumer electronics, and more like an expensive refined industrial asset.",
+      "purpose": "Synthesize the thermodynamic floor and conclude with the future outlook",
+      "visual_hint": "Kinetic typography framing the chemical cost reality of the clean energy transition",
+      "visualMode": "large_typography"
+    }
+  ],
+  "ending": "The electric vehicle revolution will not be won by software. It will be decided in the chemistry of the cathode."
+}

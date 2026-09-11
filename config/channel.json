@@ -1,0 +1,40 @@
+{
+  "channelName": "Tech Explained",
+  "language": "en",
+  "videoFormat": "16:9",
+  "resolution": "1920x1080",
+  "fps": 30,
+  "targetDurationSeconds": 600,
+  "video": {
+    "targetDurationMinutes": 10,
+    "minimumDurationMinutes": 7,
+    "maximumDurationMinutes": 13,
+    "preferredChapters": 8,
+    "allowDynamicChapterCount": true,
+    "wordsPerMinuteEstimate": 150
+  },
+  "editorial": {
+    "requireThesis": true,
+    "requireSourceTraceability": true,
+    "allowNarrativeSpeculation": true,
+    "maxConsecutiveSameVisualMode": 2,
+    "antiSlopMode": true,
+    "coldOpenMaxSeconds": 30,
+    "retentionRefreshIntervalSeconds": 90
+  },
+  "visualStyle": {
+    "type": "modern-documentary",
+    "density": "high",
+    "motion": "medium"
+  },
+  "voice": {
+    "provider": "local",
+    "voice": "am_adam",
+    "speed": 1.0
+  },
+  "versions": {
+    "scriptGenerator": "2.0.0",
+    "storyboardGenerator": "2.0.0",
+    "visualGenerator": "2.0.4"
+  }
+}

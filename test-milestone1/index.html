@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Milestone 1 Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #08090e; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    #stage {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at center, #161924 0%, #08090e 100%);
+      color: #ffffff;
+    }
+    h1 {
+      font-size: 72px;
+      font-weight: 800;
+      color: #00f5ff;
+      text-shadow: 0 0 30px rgba(0, 245, 255, 0.4);
+      margin-bottom: 24px;
+      letter-spacing: 2px;
+    }
+    p {
+      font-size: 32px;
+      color: #94a3b8;
+    }
+  </style>
+  <script src="gsap.min.js"></script>
+</head>
+<body>
+  <div id="stage" data-composition-id="main" data-start="0" data-duration="2" data-fps="30" data-width="1920" data-height="1080">
+    <h1 id="title">AUTONOMOUS VIDEO FACTORY</h1>
+    <p id="subtitle">HyperFrames Deterministic 1080p Engine</p>
+  </div>
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+    window.__timelines["main"] = tl;
+    tl.to({}, { duration: 2 }, 0);
+    tl.from("#title", { opacity: 0, y: 40, duration: 0.8, ease: "power3.out" }, 0.1);
+    tl.from("#subtitle", { opacity: 0, y: 20, duration: 0.8, ease: "power3.out" }, 0.4);
+  </script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+{
+  "version": "1.0.0",
+  "name": "Modern Tech Documentary",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "safeZone": {
+      "top": 80,
+      "bottom": 120,
+      "left": 100,
+      "right": 100
+    }
+  },
+  "typography": {
+    "fontFamilyDisplay": "'Inter', 'Segoe UI', system-ui, sans-serif",
+    "fontFamilyBody": "'Inter', 'Segoe UI', system-ui, sans-serif",
+    "fontFamilyCode": "'JetBrains Mono', 'Fira Code', monospace",
+    "scale": {
+      "hero": "72px",
+      "h1": "54px",
+      "h2": "40px",
+      "h3": "28px",
+      "body": "22px",
+      "caption": "18px"
+    },
+    "lineHeight": 1.25,
+    "weights": {
+      "bold": 800,
+      "semi": 600,
+      "normal": 400
+    }
+  },
+  "colors": {
+    "background": "#08090e",
+    "backgroundElevated": "#10121a",
+    "surface": "#161924",
+    "surfaceBorder": "rgba(255, 255, 255, 0.1)",
+    "primary": "#00f5ff",
+    "secondary": "#8a2be2",
+    "accent": "#ff007f",
+    "success": "#00ff88",
+    "warning": "#ffaa00",
+    "text": "#ffffff",
+    "textMuted": "#94a3b8",
+    "textFaint": "#64748b",
+    "gridLine": "rgba(255, 255, 255, 0.04)"
+  },
+  "motion": {
+    "easeDefault": "power3.out",
+    "easeEmphasis": "elastic.out(1, 0.75)",
+    "durationFast": 0.4,
+    "durationMedium": 0.8,
+    "durationSlow": 1.4,
+    "staggerDefault": 0.08
+  },
+  "visualStyles": {
+    "density": "high",
+    "cardBorderRadius": "16px",
+    "cardGlow": "0 8px 32px rgba(0, 245, 255, 0.12)",
+    "chartTheme": {
+      "gridColor": "rgba(255, 255, 255, 0.06)",
+      "lineColor": "#00f5ff",
+      "fillColor": "rgba(0, 245, 255, 0.1)",
+      "barColor": "#8a2be2",
+      "accentColor": "#ff007f"
+    },
+    "diagramTheme": {
+      "nodeBackground": "#161924",
+      "nodeBorder": "#00f5ff",
+      "edgeColor": "#64748b",
+      "edgeActive": "#00f5ff"
+    }
+  }
+}

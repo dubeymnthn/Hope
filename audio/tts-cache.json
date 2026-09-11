@@ -1,0 +1,50 @@
+{
+  "scene-001": {
+    "sceneId": "scene-001",
+    "narrationHash": "7740281a1ca92ea87800e48eae6944f1ca234cbd5a64b072fd5bda7d2d4f8f2a",
+    "audioPath": "/home/manthan/Documents/Hope/audio/scene-001.wav",
+    "duration": 9.4,
+    "generationTimeMs": 0,
+    "completedAt": "2026-09-11T01:14:56.388Z"
+  },
+  "scene-002": {
+    "sceneId": "scene-002",
+    "narrationHash": "cdb10d953d44b14c8b3d9fafa555c57d7239c01af8db63bbb6a28eee735dad58",
+    "audioPath": "/home/manthan/Documents/Hope/audio/scene-002.wav",
+    "duration": 10.76,
+    "generationTimeMs": 0,
+    "completedAt": "2026-09-11T01:14:56.400Z"
+  },
+  "scene-003": {
+    "sceneId": "scene-003",
+    "narrationHash": "c7165890b854207a35865e650d85bf24dfce02acc53270469d398a55578ba428",
+    "audioPath": "/home/manthan/Documents/Hope/audio/scene-003.wav",
+    "duration": 12.2,
+    "generationTimeMs": 0,
+    "completedAt": "2026-09-11T01:14:56.412Z"
+  },
+  "scene-004": {
+    "sceneId": "scene-004",
+    "narrationHash": "086e832d0f03f68eb3fdefd245fade3b45abe7d6995b9f359226ebdbf133daab",
+    "audioPath": "/home/manthan/Documents/Hope/audio/scene-004.wav",
+    "duration": 9,
+    "generationTimeMs": 0,
+    "completedAt": "2026-09-11T01:14:56.423Z"
+  },
+  "scene-005": {
+    "sceneId": "scene-005",
+    "narrationHash": "de876336de019d259842c83cf4406262897ed4792644f0a3c00d386857e94074",
+    "audioPath": "/home/manthan/Documents/Hope/audio/scene-005.wav",
+    "duration": 10.84,
+    "generationTimeMs": 0,
+    "completedAt": "2026-09-11T01:14:56.435Z"
+  },
+  "scene-006": {
+    "sceneId": "scene-006",
+    "narrationHash": "335bb3912ad768ac5b4a7d7da8bd59996296b44007ee6d5e85b26dce17ee4870",
+    "audioPath": "/home/manthan/Documents/Hope/audio/scene-006.wav",
+    "duration": 10.8,
+    "generationTimeMs": 0,
+    "completedAt": "2026-09-11T01:14:56.447Z"
+  }
+}

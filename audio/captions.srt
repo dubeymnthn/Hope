@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:09,400
+Over the past two years, spot market prices for enterprise memory have surged by more than two hundred percent. What began as a routine tech cycle has morphed into a historic silicon bottleneck.
+
+2
+00:00:09,400 --> 00:00:20,160
+To feed modern AI processors, manufacturers must use High Bandwidth Memory. But here is the catch: producing one gigabyte of HBM takes three times as much physical silicon wafer area as standard DDR5.
+
+3
+00:00:20,160 --> 00:00:32,359
+By mid-2024, memory giants SK Hynix and Micron dropped an unprecedented bombshell: their entire production lines were sold out through 2025, with major customer allocations already locked in for 2026.
+
+4
+00:00:32,359 --> 00:00:41,359
+Even with wafers pressed, chips cannot ship without advanced packaging. TSMC's CoWoS packaging lines are stretched to the limit, with order wait times exceeding fifty-two weeks.
+
+5
+00:00:41,359 --> 00:00:52,200
+Because memory fabs shifted eighty percent of new investment into AI silicon, standard memory inventories collapsed from sixteen weeks down to three. The AI boom is actively cannibalizing consumer tech.
+
+6
+00:00:52,200 --> 00:01:03,000
+As the industry races toward next-generation HBM4, the memory supercycle is no longer just a supply hiccup. It is the defining economic tollbooth of the entire artificial intelligence revolution.
